@@ -1,0 +1,97 @@
+package com.canni.runpod.data.api
+
+import com.canni.runpod.data.api.dto.CreateNetworkVolumeRequest
+import com.canni.runpod.data.api.dto.CreatePodRequest
+import com.canni.runpod.data.api.dto.ListDataCentersResponse
+import com.canni.runpod.data.api.dto.ListGpuTypesResponse
+import com.canni.runpod.data.api.dto.ListNetworkVolumesResponse
+import com.canni.runpod.data.api.dto.ListPodsResponse
+import com.canni.runpod.data.api.dto.ListTemplatesResponse
+import com.canni.runpod.data.api.dto.NetworkVolume
+import com.canni.runpod.data.api.dto.Pod
+import com.canni.runpod.data.api.dto.UpdateNetworkVolumeRequest
+import retrofit2.Response
+import retrofit2.http.Body
+import retrofit2.http.DELETE
+import retrofit2.http.GET
+import retrofit2.http.PATCH
+import retrofit2.http.POST
+import retrofit2.http.Path
+import retrofit2.http.Query
+
+interface RunPodApi {
+
+    @GET("pods")
+    suspend fun listPods(
+        @Query("includeClusterPods") includeClusterPods: Boolean = false,
+    ): Response<ListPodsResponse>
+
+    @GET("pods/{id}")
+    suspend fun getPod(
+        @Path("id") id: String,
+    ): Response<Pod>
+
+    @POST("pods/{id}/action")
+    suspend fun podAction(
+        @Path("id") id: String,
+        @Body action: PodActionRequest,
+    ): Response<Pod>
+
+    @POST("pods")
+    suspend fun createPod(
+        @Body body: CreatePodRequest,
+    ): Response<Pod>
+
+    @GET("catalog/gpus")
+    suspend fun listGpuTypes(
+        @Query("include") include: String? = "AVAILABILITY",
+        @Query("product") product: String? = "POD",
+    ): Response<ListGpuTypesResponse>
+
+    @GET("catalog/datacenters")
+    suspend fun listDataCenters(): Response<ListDataCentersResponse>
+
+    @GET("catalog/templates")
+    suspend fun listPublicTemplates(
+        @Query("source") source: String? = null,
+    ): Response<ListTemplatesResponse>
+
+    @GET("templates")
+    suspend fun listTemplates(): Response<ListTemplatesResponse>
+
+    @GET("network-volumes")
+    suspend fun listNetworkVolumes(): Response<ListNetworkVolumesResponse>
+
+    @POST("network-volumes")
+    suspend fun createNetworkVolume(
+        @Body body: CreateNetworkVolumeRequest,
+    ): Response<NetworkVolume>
+
+    @PATCH("network-volumes/{id}")
+    suspend fun updateNetworkVolume(
+        @Path("id") id: String,
+        @Body body: UpdateNetworkVolumeRequest,
+    ): Response<NetworkVolume>
+
+    @DELETE("network-volumes/{id}")
+    suspend fun deleteNetworkVolume(
+        @Path("id") id: String,
+    ): Response<Unit>
+
+    @GET("billing")
+    suspend fun billing(
+        @Query("startTime") startTime: String? = null,
+        @Query("endTime") endTime: String? = null,
+        @Query("bucketSize") bucketSize: String? = null,
+        @Query("lastN") lastN: Int? = null,
+    ): Response<com.canni.runpod.data.api.dto.ListBillingResponse>
+
+    @GET("billing/pods")
+    suspend fun podBilling(
+        @Query("startTime") startTime: String? = null,
+        @Query("endTime") endTime: String? = null,
+        @Query("bucketSize") bucketSize: String? = null,
+        @Query("lastN") lastN: Int? = null,
+        @Query("podId") podId: String? = null,
+    ): Response<com.canni.runpod.data.api.dto.ListPodBillingResponse>
+}
