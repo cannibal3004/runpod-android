@@ -36,6 +36,11 @@ data class Pod(
 )
 
 @Serializable
+data class UpdatePodLockedRequest(
+    val locked: Boolean,
+)
+
+@Serializable
 enum class PodStatus {
     PROVISIONING,
     STARTING,

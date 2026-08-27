@@ -9,13 +9,16 @@ import com.canni.runpod.data.api.dto.ListPodsResponse
 import com.canni.runpod.data.api.dto.ListTemplatesResponse
 import com.canni.runpod.data.api.dto.NetworkVolume
 import com.canni.runpod.data.api.dto.Pod
+import com.canni.runpod.data.api.dto.SshKeys
 import com.canni.runpod.data.api.dto.UpdateNetworkVolumeRequest
+import com.canni.runpod.data.api.dto.UpdateSshKeysRequest
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -35,6 +38,12 @@ interface RunPodApi {
     suspend fun podAction(
         @Path("id") id: String,
         @Body action: PodActionRequest,
+    ): Response<Pod>
+
+    @PATCH("pods/{id}")
+    suspend fun updatePod(
+        @Path("id") id: String,
+        @Body body: com.canni.runpod.data.api.dto.UpdatePodLockedRequest,
     ): Response<Pod>
 
     @POST("pods")
@@ -85,6 +94,14 @@ interface RunPodApi {
         @Query("bucketSize") bucketSize: String? = null,
         @Query("lastN") lastN: Int? = null,
     ): Response<com.canni.runpod.data.api.dto.ListBillingResponse>
+
+    @GET("account/ssh-keys")
+    suspend fun listSshKeys(): Response<SshKeys>
+
+    @PUT("account/ssh-keys")
+    suspend fun replaceSshKeys(
+        @Body body: UpdateSshKeysRequest,
+    ): Response<SshKeys>
 
     @GET("billing/pods")
     suspend fun podBilling(
