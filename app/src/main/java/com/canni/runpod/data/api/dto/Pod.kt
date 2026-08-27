@@ -41,6 +41,11 @@ data class UpdatePodLockedRequest(
 )
 
 @Serializable
+data class PodEditResult(
+    val id: String,
+)
+
+@Serializable
 enum class PodStatus {
     PROVISIONING,
     STARTING,

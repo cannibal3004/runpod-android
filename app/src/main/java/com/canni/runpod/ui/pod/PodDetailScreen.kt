@@ -14,9 +14,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -30,7 +34,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -46,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import android.content.Context
@@ -59,6 +66,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.canni.runpod.data.api.dto.Pod
 import com.canni.runpod.data.api.dto.PodAction
+import com.canni.runpod.data.api.dto.PodStatus
 import com.canni.runpod.data.auth.SshKeyStore
 import com.canni.runpod.data.repo.TermuxSshRepository
 import com.canni.runpod.ui.common.formatCostPerHour
@@ -122,6 +130,9 @@ fun PodDetailScreen(
                     }
                 },
                 actions = {
+                    if (pod != null) {
+                        TextButton(onClick = { viewModel.openEdit() }) { Text("Edit") }
+                    }
                     TextButton(onClick = onOpenLogs) { Text("Logs") }
                 },
             )
@@ -371,6 +382,378 @@ fun PodDetailScreen(
                 onDone = { viewModel.clearMigration() },
                 onClose = { viewModel.dismissMigrationDialog() },
             )
+        }
+    }
+
+    state.edit?.let { edit ->
+        EditPodEditor(
+            edit = edit,
+            isRunning = pod?.status == PodStatus.RUNNING,
+            onDismiss = { viewModel.closeEdit() },
+            onImageChange = { viewModel.onEditImageChange(it) },
+            onArgsChange = { viewModel.onEditArgsChange(it) },
+            onDiskChange = { viewModel.onEditDiskChange(it) },
+            onVolumeSizeChange = { viewModel.onEditVolumeSizeChange(it) },
+            onVolumePathChange = { viewModel.onEditVolumePathChange(it) },
+            onPortChange = { i, v -> viewModel.onEditPortChange(i, v) },
+            onPortProtocolChange = { i, p -> viewModel.onEditPortProtocolChange(i, p) },
+            onAddPort = { viewModel.addEditPortEntry() },
+            onRemovePort = { i -> viewModel.removeEditPortEntry(i) },
+            onOpenEnvEditor = { viewModel.openEnvEditor() },
+            onSave = { viewModel.saveEdit() },
+        )
+    }
+
+    val edit = state.edit
+    if (edit != null && state.envEditorVisible) {
+        EnvVarEditor(
+            entries = edit.envEntries,
+            onKeyChange = { i, v -> viewModel.onEditEnvKeyChange(i, v) },
+            onValueChange = { i, v -> viewModel.onEditEnvValueChange(i, v) },
+            onAdd = { viewModel.addEditEnvEntry() },
+            onRemove = { i -> viewModel.removeEditEnvEntry(i) },
+            onBack = { viewModel.closeEnvEditor() },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EnvVarEditor(
+    entries: List<PodDetailViewModel.EditEnvEntry>,
+    onKeyChange: (Int, String) -> Unit,
+    onValueChange: (Int, String) -> Unit,
+    onAdd: () -> Unit,
+    onRemove: (Int) -> Unit,
+    onBack: () -> Unit,
+) {
+    var editingIndex by remember { mutableStateOf<Int?>(null) }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text("Environment variables") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    TextButton(onClick = onBack) { Text("Done") }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+        ) {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(entries.size) { index ->
+                    val entry = entries[index]
+                    val isEditing = editingIndex == index
+                    if (isEditing) {
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                OutlinedTextField(
+                                    value = entry.key,
+                                    onValueChange = { onKeyChange(index, it) },
+                                    label = { Text("Key") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                OutlinedTextField(
+                                    value = entry.value,
+                                    onValueChange = { onValueChange(index, it) },
+                                    label = { Text("Value") },
+                                    minLines = 1,
+                                    maxLines = 8,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End,
+                                ) {
+                                    TextButton(onClick = { onRemove(index); editingIndex = null }) {
+                                        Text(
+                                            "Remove",
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                    TextButton(onClick = { editingIndex = null }) { Text("Close") }
+                                }
+                            }
+                        }
+                    } else {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { editingIndex = index },
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = 8.dp),
+                                ) {
+                                    Text(
+                                        text = entry.key.ifBlank { "(no key)" },
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
+                                    Text(
+                                        text = entry.value.ifBlank { "(empty)" },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = "Edit variable",
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Button(
+                onClick = {
+                    onAdd()
+                    editingIndex = entries.size
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+            ) {
+                Text("Add variable")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditPodEditor(
+    edit: PodDetailViewModel.EditPodUi,
+    isRunning: Boolean,
+    onDismiss: () -> Unit,
+    onImageChange: (String) -> Unit,
+    onArgsChange: (String) -> Unit,
+    onDiskChange: (String) -> Unit,
+    onVolumeSizeChange: (String) -> Unit,
+    onVolumePathChange: (String) -> Unit,
+    onPortChange: (Int, String) -> Unit,
+    onPortProtocolChange: (Int, String) -> Unit,
+    onAddPort: () -> Unit,
+    onRemovePort: (Int) -> Unit,
+    onOpenEnvEditor: () -> Unit,
+    onSave: () -> Unit,
+) {
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text("Edit Pod") },
+                navigationIcon = {
+                    IconButton(onClick = onDismiss, enabled = !edit.isSaving) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    TextButton(
+                        onClick = onSave,
+                        enabled = !edit.isSaving,
+                    ) {
+                        if (edit.isSaving) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text("Save")
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (isRunning) {
+                item(key = "warning") {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                    ) {
+                        Text(
+                            text = "Editing a running pod resets it. Data outside the volume mount path will be lost.",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(12.dp),
+                        )
+                    }
+                }
+            }
+            item(key = "image") {
+                OutlinedTextField(
+                    value = edit.image,
+                    onValueChange = onImageChange,
+                    label = { Text("Container image") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            item(key = "args") {
+                OutlinedTextField(
+                    value = edit.args,
+                    onValueChange = onArgsChange,
+                    label = { Text("Startup command") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            item(key = "disk") {
+                OutlinedTextField(
+                    value = edit.disk,
+                    onValueChange = onDiskChange,
+                    label = { Text("Container disk (GB)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (!edit.isNetworkVolume) {
+                item(key = "volume") {
+                    OutlinedTextField(
+                        value = edit.volumeSize,
+                        onValueChange = onVolumeSizeChange,
+                        label = { Text(if (edit.hasVolume) "Volume disk (GB)" else "Volume disk (GB, optional)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+            item(key = "volume_path") {
+                OutlinedTextField(
+                    value = edit.volumePath,
+                    onValueChange = onVolumePathChange,
+                    label = { Text("Volume mount path") },
+                    supportingText = { Text("e.g. /workspace") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            item(key = "ports_header") {
+                Text(
+                    text = "Exposed ports",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            items(edit.portEntries.size) { i ->
+                val p = edit.portEntries[i]
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = p.port,
+                        onValueChange = { onPortChange(i, it) },
+                        label = { Text("Port") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                    )
+                    PortProtocolPicker(protocol = p.protocol) { onPortProtocolChange(i, it) }
+                    IconButton(onClick = { onRemovePort(i) }) {
+                        Icon(Icons.Default.Close, contentDescription = "Remove port")
+                    }
+                }
+            }
+            item(key = "add_port") {
+                TextButton(onClick = onAddPort) { Text("Add port") }
+            }
+            item(key = "env") {
+                OutlinedButton(
+                    onClick = onOpenEnvEditor,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Environment variables")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "${edit.envEntries.size}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = "Edit environment variables",
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                }
+            }
+            edit.error?.let { message ->
+                item(key = "error") {
+                    Text(
+                        text = message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PortProtocolPicker(protocol: String, onChange: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.width(88.dp),
+        ) {
+            Text(protocol)
+            Spacer(Modifier.width(4.dp))
+            Icon(Icons.Default.ArrowDropDown, contentDescription = "Protocol", modifier = Modifier.size(16.dp))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            listOf("http", "tcp", "udp").forEach { proto ->
+                DropdownMenuItem(
+                    text = { Text(proto) },
+                    onClick = {
+                        expanded = false
+                        onChange(proto)
+                    },
+                )
+            }
         }
     }
 }

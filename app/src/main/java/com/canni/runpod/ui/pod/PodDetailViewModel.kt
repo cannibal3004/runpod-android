@@ -56,6 +56,31 @@ class PodDetailViewModel @Inject constructor(
             get() = status?.lowercase() == "completed"
     }
 
+    data class EditPortEntry(
+        val port: String = "",
+        val protocol: String = "http",
+    )
+
+    data class EditEnvEntry(
+        val key: String = "",
+        val value: String = "",
+    )
+
+    data class EditPodUi(
+        val image: String = "",
+        val args: String = "",
+        val disk: String = "",
+        val volumeSize: String = "",
+        val volumePath: String = "",
+        val hasVolume: Boolean = false,
+        val minVolumeSize: Int? = null,
+        val isNetworkVolume: Boolean = false,
+        val portEntries: List<EditPortEntry> = emptyList(),
+        val envEntries: List<EditEnvEntry> = emptyList(),
+        val isSaving: Boolean = false,
+        val error: String? = null,
+    )
+
     data class UiState(
         val pod: Pod? = null,
         val isLoading: Boolean = true,
@@ -67,6 +92,8 @@ class PodDetailViewModel @Inject constructor(
         val migration: MigrationUi? = null,
         val migrationBusy: Boolean = false,
         val migrationDialogDismissed: Boolean = false,
+        val edit: EditPodUi? = null,
+        val envEditorVisible: Boolean = false,
         val termuxBusy: Boolean = false,
         val termuxError: String? = null,
         val termuxHint: String? = null,
@@ -150,6 +177,174 @@ class PodDetailViewModel @Inject constructor(
 
     fun clearActionError() {
         _state.update { it.copy(actionError = null) }
+    }
+
+    fun openEdit() {
+        val pod = _state.value.pod ?: return
+        if (_state.value.edit != null) return
+        val persistent = pod.mounts?.persistent
+        val network = pod.mounts?.network?.firstOrNull()
+        val ui = EditPodUi(
+            image = pod.image,
+            args = pod.args.orEmpty(),
+            disk = pod.disk?.toString().orEmpty(),
+            volumeSize = persistent?.size?.toString().orEmpty(),
+            volumePath = persistent?.path ?: network?.path ?: "",
+            hasVolume = persistent != null,
+            minVolumeSize = persistent?.size,
+            isNetworkVolume = network != null,
+            portEntries = (pod.ports ?: emptyList()).map { spec ->
+                val idx = spec.indexOf('/')
+                if (idx > 0) {
+                    EditPortEntry(spec.substring(0, idx), spec.substring(idx + 1).ifBlank { "tcp" })
+                } else {
+                    EditPortEntry(spec, "tcp")
+                }
+            },
+            envEntries = (pod.env ?: emptyMap()).map { (k, v) -> EditEnvEntry(k, v) },
+        )
+        _state.update { it.copy(edit = ui) }
+    }
+
+    fun closeEdit() {
+        if (_state.value.edit?.isSaving == true) return
+        _state.update { it.copy(edit = null, envEditorVisible = false) }
+    }
+
+    fun openEnvEditor() {
+        if (_state.value.edit == null) return
+        _state.update { it.copy(envEditorVisible = true) }
+    }
+
+    fun closeEnvEditor() {
+        _state.update { it.copy(envEditorVisible = false) }
+    }
+
+    fun onEditImageChange(value: String) = updateEdit { it.copy(image = value, error = null) }
+
+    fun onEditArgsChange(value: String) = updateEdit { it.copy(args = value, error = null) }
+
+    fun onEditDiskChange(value: String) = updateEdit { it.copy(disk = value, error = null) }
+
+    fun onEditVolumeSizeChange(value: String) = updateEdit { it.copy(volumeSize = value, error = null) }
+
+    fun onEditVolumePathChange(value: String) = updateEdit { it.copy(volumePath = value, error = null) }
+
+    fun onEditPortChange(index: Int, value: String) = updateEdit {
+        it.copy(portEntries = it.portEntries.mapIndexed { i, p -> if (i == index) p.copy(port = value) else p })
+    }
+
+    fun onEditPortProtocolChange(index: Int, protocol: String) = updateEdit {
+        it.copy(portEntries = it.portEntries.mapIndexed { i, p -> if (i == index) p.copy(protocol = protocol) else p })
+    }
+
+    fun addEditPortEntry() {
+        updateEdit { it.copy(portEntries = it.portEntries + EditPortEntry()) }
+    }
+
+    fun removeEditPortEntry(index: Int) {
+        updateEdit { it.copy(portEntries = it.portEntries.filterIndexed { i, _ -> i != index }) }
+    }
+
+    fun onEditEnvKeyChange(index: Int, value: String) = updateEdit {
+        it.copy(envEntries = it.envEntries.mapIndexed { i, e -> if (i == index) e.copy(key = value) else e })
+    }
+
+    fun onEditEnvValueChange(index: Int, value: String) = updateEdit {
+        it.copy(envEntries = it.envEntries.mapIndexed { i, e -> if (i == index) e.copy(value = value) else e })
+    }
+
+    fun addEditEnvEntry() {
+        updateEdit { it.copy(envEntries = it.envEntries + EditEnvEntry()) }
+    }
+
+    fun removeEditEnvEntry(index: Int) {
+        updateEdit { it.copy(envEntries = it.envEntries.filterIndexed { i, _ -> i != index }) }
+    }
+
+    private fun updateEdit(transform: (EditPodUi) -> EditPodUi) {
+        _state.update { it.copy(edit = it.edit?.let(transform)) }
+    }
+
+    fun saveEdit() {
+        val e = _state.value.edit ?: return
+        if (e.isSaving) return
+
+        val image = e.image.trim()
+        if (image.isEmpty()) return failEdit("Container image is required.")
+        val disk = e.disk.trim().toIntOrNull()
+        if (disk == null || disk < 2) return failEdit("Container disk must be at least 2 GB.")
+        for (p in e.portEntries) {
+            if (p.port.isBlank()) continue
+            val n = p.port.trim().toIntOrNull()
+            if (n == null || n !in 1..65_535) return failEdit("Invalid port: ${p.port}")
+        }
+        val volumeSizeRaw = e.volumeSize.trim()
+        val volumePath = e.volumePath.trim()
+        val volumeSize: Int?
+        if (e.hasVolume) {
+            volumeSize = volumeSizeRaw.toIntOrNull()
+                ?: return failEdit("Volume disk size is required.")
+            val min = e.minVolumeSize
+            if (volumeSize < 1 || (min != null && volumeSize < min)) {
+                return failEdit("Volume disk size cannot be decreased (current: ${min ?: "?"} GB).")
+            }
+            if (volumePath.isEmpty() || !volumePath.startsWith("/")) {
+                return failEdit("Volume mount path must be an absolute path, e.g. /workspace.")
+            }
+        } else if (e.isNetworkVolume) {
+            volumeSize = null
+            if (volumePath.isEmpty() || !volumePath.startsWith("/")) {
+                return failEdit("Volume mount path must be an absolute path, e.g. /runpod-volume.")
+            }
+        } else {
+            if (volumeSizeRaw.isEmpty()) {
+                volumeSize = null
+            } else {
+                volumeSize = volumeSizeRaw.toIntOrNull()
+                    ?: return failEdit("Volume disk size must be a whole number of GB.")
+                if (volumeSize < 1) return failEdit("Volume disk size must be at least 1 GB.")
+                if (volumePath.isEmpty() || !volumePath.startsWith("/")) {
+                    return failEdit("Volume mount path must be an absolute path, e.g. /workspace.")
+                }
+            }
+        }
+        val env = e.envEntries
+            .filter { it.key.isNotBlank() }
+            .map { it.key.trim() to it.value }
+
+        _state.update { it.copy(edit = it.edit?.copy(isSaving = true, error = null)) }
+        viewModelScope.launch {
+            attempt {
+                podRepository.editPod(
+                    podId = podId,
+                    imageName = image,
+                    dockerArgs = e.args.trim(),
+                    containerDiskInGb = disk,
+                    volumeInGb = volumeSize,
+                    volumeMountPath = volumePath.ifEmpty { null },
+                    ports = e.portEntries
+                        .filter { it.port.isNotBlank() }
+                        .joinToString(",") { "${it.port.trim()}/${it.protocol}" },
+                    env = env,
+                )
+            }
+                .onSuccess {
+                    _state.update { it.copy(edit = null, envEditorVisible = false) }
+                    load()
+                }
+                .onFailure { err ->
+                    _state.update {
+                        it.copy(
+                            edit = it.edit?.copy(isSaving = false, error = err.message ?: "Edit failed"),
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun failEdit(message: String) {
+        _state.update { it.copy(edit = it.edit?.copy(error = message)) }
     }
 
     fun dismissMigrationPrompt() {

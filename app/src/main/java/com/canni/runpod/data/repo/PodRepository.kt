@@ -8,6 +8,7 @@ import com.canni.runpod.data.api.RunPodGraphQLApi
 import com.canni.runpod.data.api.dto.CreatePodRequest
 import com.canni.runpod.data.api.dto.Pod
 import com.canni.runpod.data.api.dto.PodAction
+import com.canni.runpod.data.api.dto.PodEditResult
 import com.canni.runpod.data.api.dto.PodMigration
 import com.canni.runpod.data.api.dto.UpdatePodLockedRequest
 import com.canni.runpod.data.api.PodActionRequest
@@ -17,6 +18,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
@@ -127,6 +129,69 @@ class PodRepository @Inject constructor(
             },
             root = "podResumeZeroGpu",
         )
+    }
+
+    suspend fun editPod(
+        podId: String,
+        imageName: String,
+        dockerArgs: String,
+        containerDiskInGb: Int,
+        volumeInGb: Int?,
+        volumeMountPath: String?,
+        ports: String,
+        env: List<Pair<String, String>>,
+    ): PodEditResult {
+        val data = executeGraphql(
+            query = """
+                mutation editPodJob(${DOLLAR}input: PodEditJobInput!) {
+                  podEditJob(input: ${DOLLAR}input) {
+                    id
+                    env
+                    port
+                    ports
+                    dockerArgs
+                    imageName
+                    containerDiskInGb
+                    volumeInGb
+                    volumeMountPath
+                  }
+                }
+            """,
+            variables = buildJsonObject {
+                put(
+                    "input",
+                    buildJsonObject {
+                        put("podId", podId)
+                        put("imageName", imageName)
+                        put("dockerArgs", dockerArgs)
+                        put("containerDiskInGb", containerDiskInGb)
+                        if (volumeInGb != null) {
+                            put("volumeInGb", volumeInGb)
+                        } else {
+                            put("volumeInGb", JsonNull)
+                        }
+                        if (volumeMountPath != null) {
+                            put("volumeMountPath", volumeMountPath)
+                        }
+                        put("ports", ports)
+                        put(
+                            "env",
+                            buildJsonArray {
+                                env.forEach { (key, value) ->
+                                    add(buildJsonObject {
+                                        put("key", key)
+                                        put("value", value)
+                                    })
+                                }
+                            },
+                        )
+                        put("containerRegistryAuthId", JsonNull)
+                    },
+                )
+            },
+            root = "podEditJob",
+        )
+        return json.decodeFromJsonElement<PodEditResult>(requireNotNull(data))
     }
 
     private suspend fun executeGraphql(
