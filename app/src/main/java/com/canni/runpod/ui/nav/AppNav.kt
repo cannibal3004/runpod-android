@@ -13,6 +13,7 @@ import com.canni.runpod.ui.logs.LogsScreen
 import com.canni.runpod.ui.pod.PodDetailScreen
 import com.canni.runpod.ui.pods.PodsScreen
 import com.canni.runpod.ui.secrets.SecretsScreen
+import com.canni.runpod.ui.serverless.EndpointFormScreen
 import com.canni.runpod.ui.serverless.ServerlessDetailScreen
 import com.canni.runpod.ui.serverless.ServerlessScreen
 import com.canni.runpod.ui.settings.SettingsScreen
@@ -28,6 +29,8 @@ object Routes {
     const val LOGS = "logs/{podId}"
     const val SERVERLESS = "serverless"
     const val SERVERLESS_DETAIL = "serverless/{endpointId}"
+    const val SERVERLESS_CREATE = "serverless/create"
+    const val SERVERLESS_EDIT = "serverless/{endpointId}/edit"
     const val SERVERLESS_WORKER_LOGS = "serverless/{endpointId}/logs/{workerId}"
     const val BILLING = "billing"
     const val STORAGE = "storage"
@@ -112,7 +115,18 @@ fun AppNav(
         composable(Routes.SERVERLESS) {
             ServerlessScreen(
                 onEndpointClick = { id -> navController.navigate(Routes.serverlessDetail(id)) },
+                onCreate = { navController.navigate(Routes.SERVERLESS_CREATE) },
                 onNavigateTopLevel = navigateTopLevel,
+            )
+        }
+        composable(Routes.SERVERLESS_CREATE) {
+            EndpointFormScreen(
+                onBack = { navController.popBackStack() },
+                onCreated = { id ->
+                    navController.navigate(Routes.serverlessDetail(id)) {
+                        popUpTo(Routes.SERVERLESS_CREATE) { inclusive = true }
+                    }
+                },
             )
         }
         composable(
@@ -123,9 +137,21 @@ fun AppNav(
             ServerlessDetailScreen(
                 endpointId = endpointId,
                 onBack = { navController.popBackStack() },
+                onEdit = {
+                    navController.navigate("serverless/$endpointId/edit")
+                },
                 onOpenWorkerLogs = { workerId ->
                     navController.navigate(Routes.serverlessWorkerLogs(endpointId, workerId))
                 },
+            )
+        }
+        composable(
+            route = Routes.SERVERLESS_EDIT,
+            arguments = listOf(navArgument("endpointId") { type = NavType.StringType }),
+        ) {
+            EndpointFormScreen(
+                onBack = { navController.popBackStack() },
+                onCreated = { navController.popBackStack() },
             )
         }
         composable(

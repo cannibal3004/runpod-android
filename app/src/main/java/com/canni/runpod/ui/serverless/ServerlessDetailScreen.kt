@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -64,6 +65,7 @@ private const val REFRESH_MS = 15_000L
 fun ServerlessDetailScreen(
     endpointId: String,
     onBack: () -> Unit,
+    onEdit: () -> Unit,
     onOpenWorkerLogs: (String) -> Unit,
     viewModel: ServerlessDetailViewModel = hiltViewModel(),
 ) {
@@ -107,6 +109,9 @@ fun ServerlessDetailScreen(
                 actions = {
                     IconButton(onClick = { viewModel.load() }) {
                         Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                    }
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Filled.Edit, contentDescription = "Edit")
                     }
                     IconButton(onClick = viewModel::showDelete) {
                         Icon(

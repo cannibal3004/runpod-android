@@ -2,6 +2,7 @@ package com.canni.runpod.data.repo
 
 import com.canni.runpod.data.api.ApiErrors
 import com.canni.runpod.data.api.RunPodApi
+import com.canni.runpod.data.api.dto.CpuType
 import com.canni.runpod.data.api.dto.DataCenter
 import com.canni.runpod.data.api.dto.GpuType
 import com.canni.runpod.data.api.dto.Template
@@ -16,6 +17,18 @@ class CatalogRepository @Inject constructor(
         val res = api.listGpuTypes()
         if (!res.isSuccessful) throw ApiErrors.fromResponse(res.code(), res.errorBody()?.string())
         return requireNotNull(res.body()).gpus
+    }
+
+    suspend fun listServerlessGpuTypes(): List<GpuType> {
+        val res = api.listGpuTypes(include = "AVAILABILITY", product = "SERVERLESS")
+        if (!res.isSuccessful) throw ApiErrors.fromResponse(res.code(), res.errorBody()?.string())
+        return requireNotNull(res.body()).gpus
+    }
+
+    suspend fun listCpuTypes(): List<CpuType> {
+        val res = api.listCpuTypes()
+        if (!res.isSuccessful) throw ApiErrors.fromResponse(res.code(), res.errorBody()?.string())
+        return requireNotNull(res.body()).cpus
     }
 
     suspend fun listDataCenters(): List<DataCenter> {

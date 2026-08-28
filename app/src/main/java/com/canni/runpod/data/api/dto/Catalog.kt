@@ -59,6 +59,33 @@ data class CudaVersionAvailability(
 )
 
 @Serializable
+data class ListCpuTypesResponse(
+    val cpus: List<CpuType> = emptyList(),
+)
+
+@Serializable
+data class CpuType(
+    val id: String,
+    val name: String = "",
+    val group: String? = null,
+    val vcpu: CpuVcpuRange = CpuVcpuRange(),
+    val ramGbPerVcpu: Double = 0.0,
+    val price: CpuPrice = CpuPrice(),
+)
+
+@Serializable
+data class CpuVcpuRange(
+    val min: Int = 2,
+    val max: Int = 32,
+)
+
+@Serializable
+data class CpuPrice(
+    val securePerVcpu: Double = 0.0,
+    val serverlessPerVcpu: Double = 0.0,
+)
+
+@Serializable
 data class ListDataCentersResponse(
     val dataCenters: List<DataCenter> = emptyList(),
 )

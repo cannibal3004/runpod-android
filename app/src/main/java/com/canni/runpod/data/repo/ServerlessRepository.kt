@@ -24,6 +24,21 @@ class ServerlessRepository @Inject constructor(
         return requireNotNull(res.body())
     }
 
+    suspend fun createEndpoint(request: com.canni.runpod.data.api.dto.CreateEndpointRequest): ServerlessEndpoint {
+        val res = api.createEndpoint(request)
+        if (!res.isSuccessful) throw ApiErrors.fromResponse(res.code(), res.errorBody()?.string())
+        return requireNotNull(res.body())
+    }
+
+    suspend fun updateEndpoint(
+        id: String,
+        request: com.canni.runpod.data.api.dto.UpdateEndpointRequest,
+    ): ServerlessEndpoint {
+        val res = api.updateEndpoint(id, request)
+        if (!res.isSuccessful) throw ApiErrors.fromResponse(res.code(), res.errorBody()?.string())
+        return requireNotNull(res.body())
+    }
+
     suspend fun deleteEndpoint(id: String) {
         val res = api.deleteEndpoint(id)
         if (!res.isSuccessful) throw ApiErrors.fromResponse(res.code(), res.errorBody()?.string())

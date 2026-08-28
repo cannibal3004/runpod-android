@@ -10,7 +10,6 @@ import com.canni.runpod.data.api.dto.ServerlessEndpoint
 import com.canni.runpod.data.repo.ServerlessRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,26 +51,23 @@ class ServerlessDetailViewModel @Inject constructor(
             _state.update { it.copy(isRefreshing = true) }
         }
         viewModelScope.launch {
-            val endpointDeferred = async { serverlessRepository.getEndpoint(endpointId) }
-            val workersDeferred = async {
-                runCatching { serverlessRepository.listWorkers(endpointId) }.getOrNull()
-            }
-            val releasesDeferred = async {
-                runCatching { serverlessRepository.listReleases(endpointId) }.getOrNull()
-            }
-            try {
-                val endpoint = endpointDeferred.await()
+            val endpointResult = runCatching { serverlessRepository.getEndpoint(endpointId) }
+            if (endpointResult.isSuccess) {
+                val endpoint = endpointResult.getOrThrow()
+                val workers = runCatching { serverlessRepository.listWorkers(endpointId) }.getOrNull()
+                val releases = runCatching { serverlessRepository.listReleases(endpointId) }.getOrNull()
                 _state.update {
                     it.copy(
                         endpoint = endpoint,
-                        workers = workersDeferred.await(),
-                        releases = releasesDeferred.await(),
+                        workers = workers,
+                        releases = releases,
                         isLoading = false,
                         isRefreshing = false,
                         error = null,
                     )
                 }
-            } catch (e: Exception) {
+            } else {
+                val e = endpointResult.exceptionOrNull()!!
                 _state.update {
                     if (silent && it.endpoint != null && e is ApiError && e.code == 404) {
                         it.copy(isLoading = false, isRefreshing = false, endpointGone = true)

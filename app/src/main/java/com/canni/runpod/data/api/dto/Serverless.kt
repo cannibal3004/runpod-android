@@ -181,3 +181,43 @@ data class WorkerSummary(
     val unhealthy: Int = 0,
     val total: Int = 0,
 )
+
+@Serializable
+data class CreateEndpointRequest(
+    val name: String,
+    val type: String,
+    val image: String? = null,
+    val args: String? = null,
+    val disk: Int? = null,
+    val env: Map<String, String>? = null,
+    val ports: List<String>? = null,
+    val registry: String? = null,
+    val gpu: EndpointGpuConfig? = null,
+    val cpu: List<EndpointCpuConfig>? = null,
+    val workers: EndpointWorkers? = null,
+    val scaling: JsonElement? = null,
+    val dataCenterIds: List<String>? = null,
+    val networkVolumes: List<String>? = null,
+    val templateId: String? = null,
+    val timeout: Int? = null,
+    val flashboot: String? = null,
+)
+
+@Serializable
+data class UpdateEndpointRequest(
+    val name: String? = null,
+    val image: String? = null,
+    val args: String? = null,
+    val disk: Int? = null,
+    val env: Map<String, String>? = null,
+    val ports: List<String>? = null,
+    val registry: String? = null,
+    val gpu: EndpointGpuConfig? = null,
+    val cpu: List<EndpointCpuConfig>? = null,
+    val workers: EndpointWorkers? = null,
+    val scaling: JsonElement? = null,
+    val dataCenterIds: List<String>? = null,
+    val networkVolumes: List<String>? = null,
+    val timeout: Int? = null,
+    val flashboot: String? = null,
+)

@@ -13,9 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -37,6 +41,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ServerlessScreen(
     onEndpointClick: (String) -> Unit,
+    onCreate: () -> Unit,
     onNavigateTopLevel: (String) -> Unit,
     viewModel: ServerlessViewModel = hiltViewModel(),
 ) {
@@ -51,6 +56,13 @@ fun ServerlessScreen(
         title = "Serverless",
         currentRoute = Routes.SERVERLESS,
         onNavigate = onNavigateTopLevel,
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = onCreate,
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                text = { Text("New endpoint") },
+            )
+        },
     ) { padding ->
         when {
             state.isLoading -> Box(

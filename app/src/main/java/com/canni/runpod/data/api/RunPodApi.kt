@@ -8,12 +8,15 @@ import com.canni.runpod.data.api.dto.ListNetworkVolumesResponse
 import com.canni.runpod.data.api.dto.ListPodsResponse
 import com.canni.runpod.data.api.dto.ListTemplatesResponse
 import com.canni.runpod.data.api.dto.NetworkVolume
+import com.canni.runpod.data.api.dto.CreateEndpointRequest
+import com.canni.runpod.data.api.dto.ListCpuTypesResponse
 import com.canni.runpod.data.api.dto.ListEndpointReleasesResponse
 import com.canni.runpod.data.api.dto.ListEndpointWorkersResponse
 import com.canni.runpod.data.api.dto.ListEndpointsResponse
 import com.canni.runpod.data.api.dto.Pod
 import com.canni.runpod.data.api.dto.ServerlessEndpoint
 import com.canni.runpod.data.api.dto.SshKeys
+import com.canni.runpod.data.api.dto.UpdateEndpointRequest
 import com.canni.runpod.data.api.dto.UpdateNetworkVolumeRequest
 import com.canni.runpod.data.api.dto.UpdateSshKeysRequest
 import retrofit2.Response
@@ -60,6 +63,12 @@ interface RunPodApi {
         @Query("include") include: String? = "AVAILABILITY",
         @Query("product") product: String? = "POD",
     ): Response<ListGpuTypesResponse>
+
+    @GET("catalog/cpus")
+    suspend fun listCpuTypes(
+        @Query("include") include: String? = null,
+        @Query("product") product: String? = null,
+    ): Response<ListCpuTypesResponse>
 
     @GET("catalog/datacenters")
     suspend fun listDataCenters(): Response<ListDataCentersResponse>
@@ -122,6 +131,17 @@ interface RunPodApi {
     @GET("serverless/{id}")
     suspend fun getEndpoint(
         @Path("id") id: String,
+    ): Response<ServerlessEndpoint>
+
+    @POST("serverless")
+    suspend fun createEndpoint(
+        @Body body: CreateEndpointRequest,
+    ): Response<ServerlessEndpoint>
+
+    @PATCH("serverless/{id}")
+    suspend fun updateEndpoint(
+        @Path("id") id: String,
+        @Body body: UpdateEndpointRequest,
     ): Response<ServerlessEndpoint>
 
     @DELETE("serverless/{id}")

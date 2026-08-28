@@ -72,6 +72,8 @@ import com.canni.runpod.data.repo.TermuxSshRepository
 import com.canni.runpod.ui.common.formatCostPerHour
 import com.canni.runpod.ui.common.formatUtc
 import com.canni.runpod.ui.common.formatUptime
+import com.canni.runpod.ui.components.EnvEntry
+import com.canni.runpod.ui.components.EnvVarEditor
 import com.canni.runpod.ui.components.StatusChip
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -407,143 +409,13 @@ fun PodDetailScreen(
     val edit = state.edit
     if (edit != null && state.envEditorVisible) {
         EnvVarEditor(
-            entries = edit.envEntries,
+            entries = edit.envEntries.map { EnvEntry(it.key, it.value) },
             onKeyChange = { i, v -> viewModel.onEditEnvKeyChange(i, v) },
             onValueChange = { i, v -> viewModel.onEditEnvValueChange(i, v) },
             onAdd = { viewModel.addEditEnvEntry() },
             onRemove = { i -> viewModel.removeEditEnvEntry(i) },
             onBack = { viewModel.closeEnvEditor() },
         )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun EnvVarEditor(
-    entries: List<PodDetailViewModel.EditEnvEntry>,
-    onKeyChange: (Int, String) -> Unit,
-    onValueChange: (Int, String) -> Unit,
-    onAdd: () -> Unit,
-    onRemove: (Int) -> Unit,
-    onBack: () -> Unit,
-) {
-    var editingIndex by remember { mutableStateOf<Int?>(null) }
-
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = { Text("Environment variables") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    TextButton(onClick = onBack) { Text("Done") }
-                },
-            )
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-        ) {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(entries.size) { index ->
-                    val entry = entries[index]
-                    val isEditing = editingIndex == index
-                    if (isEditing) {
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                OutlinedTextField(
-                                    value = entry.key,
-                                    onValueChange = { onKeyChange(index, it) },
-                                    label = { Text("Key") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                OutlinedTextField(
-                                    value = entry.value,
-                                    onValueChange = { onValueChange(index, it) },
-                                    label = { Text("Value") },
-                                    minLines = 1,
-                                    maxLines = 8,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End,
-                                ) {
-                                    TextButton(onClick = { onRemove(index); editingIndex = null }) {
-                                        Text(
-                                            "Remove",
-                                            color = MaterialTheme.colorScheme.error,
-                                        )
-                                    }
-                                    TextButton(onClick = { editingIndex = null }) { Text("Close") }
-                                }
-                            }
-                        }
-                    } else {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = { editingIndex = index },
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(end = 8.dp),
-                                ) {
-                                    Text(
-                                        text = entry.key.ifBlank { "(no key)" },
-                                        style = MaterialTheme.typography.labelLarge,
-                                    )
-                                    Text(
-                                        text = entry.value.ifBlank { "(empty)" },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    contentDescription = "Edit variable",
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            Button(
-                onClick = {
-                    onAdd()
-                    editingIndex = entries.size
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-            ) {
-                Text("Add variable")
-            }
-        }
     }
 }
 
