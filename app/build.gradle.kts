@@ -61,5 +61,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.security.crypto)
     implementation(libs.bcprov)
+    implementation(libs.sshj)
+    implementation(libs.slf4j.nop)
     debugImplementation(libs.compose.ui.tooling)
 }

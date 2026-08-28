@@ -38,6 +38,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -222,9 +223,25 @@ fun PodDetailScreen(
                         }
                     }
                     item(key = "spec") { SpecCard(it) }
-                    it.runtime?.ports?.takeIf { p -> p.isNotEmpty() }?.let {
-                        item(key = "ports") { PortsCard(pod) }
-                    }
+                    it.runtime?.ports
+                        ?.filter { p -> p.privatePort != 19123 }
+                        ?.takeIf { p -> p.isNotEmpty() }
+                        ?.let {
+                            item(key = "ports") { PortsCard(pod) }
+                        }
+                    state.webTerminal
+                        ?.takeIf { !it.isUnsupported }
+                        ?.let { wt ->
+                            item(key = "web_terminal") {
+                                WebTerminalCard(
+                                    wt = wt,
+                                    onToggle = { viewModel.setWebTerminalEnabled(it) },
+                                    onOpen = { url ->
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                    },
+                                )
+                            }
+                        }
                     it.ssh?.let { ssh ->
                         if (ssh.proxy?.command != null || ssh.direct?.command != null) {
                             item(key = "ssh") {
@@ -915,7 +932,8 @@ private fun SpecCard(pod: Pod) {
 
 @Composable
 private fun PortsCard(pod: Pod) {
-    val ports = pod.runtime?.ports ?: return
+    // 19123 is the web terminal port; it lives in the SSH section instead.
+    val ports = pod.runtime?.ports?.filter { it.privatePort != 19123 } ?: return
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     SectionCard("Port mappings") {
@@ -998,6 +1016,75 @@ private fun ProxyUrlRow(
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = "Open in browser",
+            )
+        }
+    }
+}
+
+@Composable
+private fun WebTerminalCard(
+    wt: PodDetailViewModel.WebTerminalUi,
+    onToggle: (Boolean) -> Unit,
+    onOpen: (String) -> Unit,
+) {
+    SectionCard("Web terminal") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = "Enable web terminal",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = "Browser-based shell on port 19123",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = wt.isRunning || wt.pending == true,
+                onCheckedChange = onToggle,
+                enabled = !wt.isLoading && !wt.isBusy,
+            )
+        }
+        val status = when {
+            wt.isLoading -> "Checking…"
+            wt.isBusy && wt.pending == true -> "Starting…"
+            wt.isBusy && wt.pending == false -> "Stopping…"
+            wt.isRunning -> "Running"
+            else -> "Stopped"
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = status,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            wt.url?.takeIf { wt.isRunning }?.let { url ->
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = url,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(onClick = { onOpen(url) }),
+                )
+                IconButton(onClick = { onOpen(url) }) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "Open web terminal",
+                    )
+                }
+            }
+        }
+        wt.error?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
             )
         }
     }

@@ -103,7 +103,11 @@ class SshKeyStore @Inject constructor(
         val pem = prefs.getString(KEY_PRIVATE, null)
         val line = prefs.getString(KEY_PUBLIC, null)
         if (pem != null && line != null) {
-            val result = Key(pem, line, GENERATED_LABEL)
+            val normalizedPem = normalizeEd25519Pem(pem)
+            val result = Key(normalizedPem, line, GENERATED_LABEL)
+            if (normalizedPem != pem) {
+                prefs.edit().putString(KEY_PRIVATE, normalizedPem).apply()
+            }
             generatedCache = result
             return result
         }
@@ -134,13 +138,45 @@ class SshKeyStore @Inject constructor(
         val publicKey = pair.public as Ed25519PublicKeyParameters
 
         val seed = privateKey.getEncoded()
-        val point = publicKey.getEncoded()
-
-        val pkcs8 = PrivateKeyInfo(AlgorithmIdentifier(EdECObjectIdentifiers.id_Ed25519), DEROctetString(seed))
-        val pem = toPem(pkcs8.encoded)
+        val pem = toPem(ed25519Pkcs8Der(seed))
         val line = toAuthorizedLine(privateKey, GENERATED_LABEL)
 
         return Key(pem, line, GENERATED_LABEL)
+    }
+
+    // Ed25519 PKCS#8 in the OpenSSL convention (version 0, double-wrapped
+    // octet string). This is what JDK/Android Ed25519 KeyFactories expect;
+    // BC's PrivateKeyInfo(algId, DEROctetString) produces exactly this.
+    private fun ed25519Pkcs8Der(seed: ByteArray): ByteArray =
+        PrivateKeyInfo(AlgorithmIdentifier(EdECObjectIdentifiers.id_Ed25519), DEROctetString(seed)).encoded
+
+    /**
+     * Normalizes a stored generated key to the OpenSSL-convention PKCS#8.
+     * Handles both the original 48-byte form and the RFC 5958 46-byte form
+     * (version 1, single-wrapped) produced by a brief regression. Idempotent;
+     * the key pair is unchanged, so the RunPod registration stays valid.
+     */
+    private fun normalizeEd25519Pem(pem: String): String {
+        return try {
+            val der = Base64.getDecoder().decode(
+                pem.lineSequence()
+                    .filterNot { it.startsWith("-----") }
+                    .joinToString("")
+                    .trim(),
+            )
+            val pkcs8 = PrivateKeyInfo.getInstance(der)
+            if (pkcs8.privateKeyAlgorithm.algorithm != EdECObjectIdentifiers.id_Ed25519) return pem
+            val octets = pkcs8.privateKey.octets
+            val seed = when {
+                octets.size == 32 -> octets
+                octets.size == 34 && octets[0] == 0x04.toByte() && octets[1] == 0x20.toByte() ->
+                    octets.copyOfRange(2, 34)
+                else -> return pem
+            }
+            toPem(ed25519Pkcs8Der(seed))
+        } catch (_: Exception) {
+            pem
+        }
     }
 
     private fun toPem(der: ByteArray): String = buildString {

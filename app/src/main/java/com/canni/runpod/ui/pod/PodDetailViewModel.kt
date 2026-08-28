@@ -13,6 +13,7 @@ import com.canni.runpod.data.auth.SshKeyStore
 import com.canni.runpod.data.repo.MigrationStore
 import com.canni.runpod.data.repo.PodRepository
 import com.canni.runpod.data.repo.TermuxSshRepository
+import com.canni.runpod.data.repo.WebTerminalRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
@@ -35,10 +36,12 @@ class PodDetailViewModel @Inject constructor(
     private val termuxSshRepository: TermuxSshRepository,
     private val sshKeyStore: SshKeyStore,
     private val migrationStore: MigrationStore,
+    private val webTerminalRepository: WebTerminalRepository,
 ) : ViewModel() {
 
     private val podId: String = savedStateHandle.get<String>("podId").orEmpty()
     private var migrationPollJob: Job? = null
+    private var webTerminalPollJob: Job? = null
 
     fun isTermuxInstalled(): Boolean = termuxSshRepository.isTermuxInstalled()
 
@@ -83,6 +86,17 @@ class PodDetailViewModel @Inject constructor(
         val error: String? = null,
     )
 
+    data class WebTerminalUi(
+        val isRunning: Boolean = false,
+        val isUnsupported: Boolean = false,
+        val isLoading: Boolean = true,
+        val isBusy: Boolean = false,
+        val pending: Boolean? = null,
+        val pendingSince: Long? = null,
+        val url: String? = null,
+        val error: String? = null,
+    )
+
     data class UiState(
         val pod: Pod? = null,
         val isLoading: Boolean = true,
@@ -94,6 +108,7 @@ class PodDetailViewModel @Inject constructor(
         val migration: MigrationUi? = null,
         val migrationBusy: Boolean = false,
         val migrationDialogDismissed: Boolean = false,
+        val webTerminal: WebTerminalUi? = null,
         val edit: EditPodUi? = null,
         val envEditorVisible: Boolean = false,
         val termuxBusy: Boolean = false,
@@ -124,6 +139,7 @@ class PodDetailViewModel @Inject constructor(
 
     override fun onCleared() {
         migrationPollJob?.cancel()
+        webTerminalPollJob?.cancel()
         super.onCleared()
     }
 
@@ -136,9 +152,16 @@ class PodDetailViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { podRepository.getPod(podId) }
                 .onSuccess { pod ->
+                    val running = pod.status == PodStatus.RUNNING
                     _state.update {
-                        it.copy(pod = pod, isLoading = false, lastUpdated = System.currentTimeMillis().toString())
+                        it.copy(
+                            pod = pod,
+                            isLoading = false,
+                            lastUpdated = System.currentTimeMillis().toString(),
+                            webTerminal = if (running) it.webTerminal ?: WebTerminalUi() else null,
+                        )
                     }
+                    if (running) startWebTerminalPolling()
                 }
                 .onFailure { e ->
                     _state.update {
@@ -149,6 +172,118 @@ class PodDetailViewModel @Inject constructor(
                         }
                     }
                 }
+        }
+    }
+
+    private fun startWebTerminalPolling() {
+        webTerminalPollJob?.cancel()
+        webTerminalPollJob = viewModelScope.launch {
+            while (true) {
+                val wt = _state.value.webTerminal
+                if (wt != null && wt.isUnsupported) return@launch
+                val pod = _state.value.pod
+                if (pod != null && pod.status == PodStatus.RUNNING) {
+                    runCatching { webTerminalRepository.check(pod) }
+                        .onSuccess { result ->
+                            _state.update { st ->
+                                val cur = st.webTerminal ?: return@update st
+                                var next = cur.copy(
+                                    isRunning = result.isRunning,
+                                    isUnsupported = result.isUnsupported,
+                                    isLoading = false,
+                                    error = null,
+                                    url = if (result.isRunning) {
+                                        webTerminalRepository.url(podId, result.hash)
+                                    } else {
+                                        null
+                                    },
+                                )
+                                val now = System.currentTimeMillis()
+                                when (next.pending) {
+                                    true -> {
+                                        if (next.isRunning && next.url != null) {
+                                            next = next.copy(isBusy = false, pending = null, pendingSince = null)
+                                        } else if (next.pendingSince != null &&
+                                            now - next.pendingSince > WEB_TERMINAL_SETTLE_MS
+                                        ) {
+                                            next = next.copy(
+                                                isBusy = false,
+                                                pending = null,
+                                                pendingSince = null,
+                                                error = "Web terminal did not start. Try again or check the pod logs.",
+                                            )
+                                        }
+                                    }
+                                    false -> {
+                                        if (!next.isRunning) {
+                                            next = next.copy(isBusy = false, pending = null, pendingSince = null)
+                                        } else if (next.pendingSince != null &&
+                                            now - next.pendingSince > WEB_TERMINAL_SETTLE_MS
+                                        ) {
+                                            next = next.copy(
+                                                isBusy = false,
+                                                pending = null,
+                                                pendingSince = null,
+                                                error = "Web terminal is still running.",
+                                            )
+                                        }
+                                    }
+                                    null -> Unit
+                                }
+                                st.copy(webTerminal = next)
+                            }
+                        }
+                        .onFailure { e ->
+                            _state.update { st ->
+                                st.copy(
+                                    webTerminal = st.webTerminal?.copy(
+                                        isLoading = false,
+                                        error = "SSH check failed: ${e.message ?: e::class.java.simpleName}. Retrying…",
+                                    ),
+                                )
+                            }
+                        }
+                }
+                delay(WEB_TERMINAL_POLL_MS)
+            }
+        }
+    }
+
+    fun setWebTerminalEnabled(enabled: Boolean) {
+        val wt = _state.value.webTerminal ?: return
+        val pod = _state.value.pod ?: return
+        if (wt.isLoading || wt.isBusy || wt.isUnsupported || wt.isRunning == enabled) return
+        _state.update {
+            it.copy(
+                webTerminal = wt.copy(
+                    isBusy = true,
+                    pending = enabled,
+                    pendingSince = System.currentTimeMillis(),
+                    error = null,
+                ),
+            )
+        }
+        viewModelScope.launch {
+            runCatching {
+                if (enabled) webTerminalRepository.start(pod) else webTerminalRepository.stop(pod)
+            }.onFailure { e ->
+                _state.update { st ->
+                    st.copy(
+                        webTerminal = st.webTerminal?.copy(
+                            isBusy = false,
+                            pending = null,
+                            pendingSince = null,
+                            error = e.message ?: "Failed to ${if (enabled) "start" else "stop"} web terminal",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearWebTerminalError() {
+        _state.update { st ->
+            st.copy(webTerminal = st.webTerminal?.copy(error = null))
         }
     }
 
@@ -650,6 +785,8 @@ class PodDetailViewModel @Inject constructor(
         const val REFRESH_MS = 5_000L
         private const val POLL_INTERVAL_MS = 5_000L
         private const val MAX_POLL_ERRORS = 3
+        private const val WEB_TERMINAL_POLL_MS = 5_000L
+        private const val WEB_TERMINAL_SETTLE_MS = 30_000L
         private val TERMINAL_STATUSES = setOf("completed", "failed", "cancelled")
         private const val ALLOW_EXTERNAL_APPS_HINT =
             "If Termux didn't open a session, check its notification. Termux requires allow-external-apps=true in ~/.termux/termux.properties."
