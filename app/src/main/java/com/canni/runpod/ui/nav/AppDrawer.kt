@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationDrawerItem
@@ -51,6 +52,12 @@ fun AppDrawerContent(
             label = { Text("Hub") },
             selected = currentRoute == Routes.HUB,
             onClick = { onSelect(Routes.HUB) },
+        )
+        NavigationDrawerItem(
+            icon = { Icon(Icons.Filled.Star, contentDescription = null) },
+            label = { Text("Templates") },
+            selected = currentRoute == Routes.TEMPLATES,
+            onClick = { onSelect(Routes.TEMPLATES) },
         )
         NavigationDrawerItem(
             icon = { Icon(Icons.Filled.ShoppingCart, contentDescription = null) },

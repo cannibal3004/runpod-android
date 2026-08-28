@@ -8,6 +8,8 @@ import com.canni.runpod.data.api.dto.ListNetworkVolumesResponse
 import com.canni.runpod.data.api.dto.ListPodsResponse
 import com.canni.runpod.data.api.dto.ListTemplatesResponse
 import com.canni.runpod.data.api.dto.NetworkVolume
+import com.canni.runpod.data.api.dto.Template
+import com.canni.runpod.data.api.dto.TemplateRequest
 import com.canni.runpod.data.api.dto.CreateEndpointRequest
 import com.canni.runpod.data.api.dto.ListCpuTypesResponse
 import com.canni.runpod.data.api.dto.ListEndpointReleasesResponse
@@ -80,6 +82,27 @@ interface RunPodApi {
 
     @GET("templates")
     suspend fun listTemplates(): Response<ListTemplatesResponse>
+
+    @GET("templates/{id}")
+    suspend fun getTemplate(
+        @Path("id") id: String,
+    ): Response<Template>
+
+    @POST("templates")
+    suspend fun createTemplate(
+        @Body body: TemplateRequest,
+    ): Response<Template>
+
+    @PATCH("templates/{id}")
+    suspend fun updateTemplate(
+        @Path("id") id: String,
+        @Body body: TemplateRequest,
+    ): Response<Template>
+
+    @DELETE("templates/{id}")
+    suspend fun deleteTemplate(
+        @Path("id") id: String,
+    ): Response<Unit>
 
     @GET("network-volumes")
     suspend fun listNetworkVolumes(): Response<ListNetworkVolumesResponse>

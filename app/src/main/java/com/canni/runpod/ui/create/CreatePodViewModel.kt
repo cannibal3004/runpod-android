@@ -1,5 +1,6 @@
 package com.canni.runpod.ui.create
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.canni.runpod.data.api.dto.Cloud
@@ -29,11 +30,14 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel
 class CreatePodViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val catalogRepository: CatalogRepository,
     private val podRepository: PodRepository,
     private val networkVolumeRepository: NetworkVolumeRepository,
     private val secretRepository: SecretRepository,
 ) : ViewModel() {
+
+    private val initialTemplateId: String? = savedStateHandle.get<String>("templateId")
 
     data class EnvEntry(
         val key: String = "",
@@ -140,6 +144,11 @@ class CreatePodViewModel @Inject constructor(
                         secretsError = sec.exceptionOrNull()?.message,
                         catalogError = error,
                     )
+                }
+                initialTemplateId?.let { id ->
+                    if (_state.value.templates.any { it2 -> it2.id == id }) {
+                        onSelectTemplate(id)
+                    }
                 }
             }
         }

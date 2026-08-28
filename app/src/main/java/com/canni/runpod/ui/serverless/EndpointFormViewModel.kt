@@ -73,6 +73,7 @@ class EndpointFormViewModel @Inject constructor(
     val isEdit: Boolean = savedStateHandle.get<String>("endpointId") != null
     private val endpointId: String = savedStateHandle.get<String>("endpointId").orEmpty()
     private val hubListingId: String? = savedStateHandle.get<String>("hubListingId")
+    private val initialTemplateId: String? = savedStateHandle.get<String>("templateId")
 
     data class EnvEntry(
         val key: String = "",
@@ -179,6 +180,9 @@ class EndpointFormViewModel @Inject constructor(
                         isLoadingCatalog = false,
                         catalogError = if (failed == 5) "Failed to load catalog" else null,
                     )
+                }
+                if (!isEdit && initialTemplateId != null) {
+                    templatesList.find { it.id == initialTemplateId }?.let { selectTemplate(it) }
                 }
             }
         }

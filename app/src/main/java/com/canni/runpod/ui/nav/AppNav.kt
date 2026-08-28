@@ -21,6 +21,9 @@ import com.canni.runpod.ui.serverless.ServerlessScreen
 import com.canni.runpod.ui.settings.SettingsScreen
 import com.canni.runpod.ui.setup.ApiKeyScreen
 import com.canni.runpod.ui.storage.StorageScreen
+import com.canni.runpod.ui.templates.TemplateDetailScreen
+import com.canni.runpod.ui.templates.TemplateFormScreen
+import com.canni.runpod.ui.templates.TemplatesScreen
 
 object Routes {
     const val SETUP = "setup"
@@ -28,14 +31,19 @@ object Routes {
     const val PODS = "pods"
     const val POD_DETAIL = "pod/{podId}"
     const val CREATE = "create"
+    const val CREATE_PATTERN = "create?template={templateId}"
     const val LOGS = "logs/{podId}"
     const val SERVERLESS = "serverless"
     const val SERVERLESS_DETAIL = "serverless/{endpointId}"
-    const val SERVERLESS_CREATE = "serverless/create?hub={hubListingId}"
+    const val SERVERLESS_CREATE = "serverless/create?hub={hubListingId}&template={templateId}"
     const val SERVERLESS_EDIT = "serverless/{endpointId}/edit"
     const val SERVERLESS_WORKER_LOGS = "serverless/{endpointId}/logs/{workerId}"
     const val HUB = "hub"
     const val HUB_DETAIL = "hub/{listingId}"
+    const val TEMPLATES = "templates"
+    const val TEMPLATE_DETAIL = "template/{templateId}"
+    const val TEMPLATE_CREATE = "template/create"
+    const val TEMPLATE_EDIT = "template/{templateId}/edit"
     const val BILLING = "billing"
     const val STORAGE = "storage"
     const val SECRETS = "secrets"
@@ -45,9 +53,16 @@ object Routes {
     fun logs(id: String) = "logs/$id"
     fun serverlessDetail(id: String) = "serverless/$id"
     fun serverlessWorkerLogs(endpointId: String, workerId: String) = "serverless/$endpointId/logs/$workerId"
-    fun serverlessCreate(hubListingId: String? = null) =
-        if (hubListingId == null) "serverless/create" else "serverless/create?hub=$hubListingId"
+    fun serverlessCreate(hubListingId: String? = null, templateId: String? = null): String {
+        val params = buildList {
+            hubListingId?.let { add("hub=$it") }
+            templateId?.let { add("template=$it") }
+        }
+        return if (params.isEmpty()) "serverless/create" else "serverless/create?${params.joinToString("&")}"
+    }
     fun hubDetail(id: String) = "hub/$id"
+    fun templateDetail(id: String) = "template/$id"
+    fun templateEdit(id: String) = "template/$id/edit"
 }
 
 @Composable
@@ -92,7 +107,16 @@ fun AppNav(
                 onNavigateTopLevel = navigateTopLevel,
             )
         }
-        composable(Routes.CREATE) {
+        composable(
+            route = Routes.CREATE_PATTERN,
+            arguments = listOf(
+                navArgument("templateId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) {
             CreatePodScreen(
                 onBack = { navController.popBackStack() },
                 onCreated = { podId ->
@@ -134,6 +158,11 @@ fun AppNav(
                     nullable = true
                     defaultValue = null
                 },
+                navArgument("templateId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
             ),
         ) {
             EndpointFormScreen(
@@ -143,6 +172,45 @@ fun AppNav(
                         popUpTo(Routes.SERVERLESS_CREATE) { inclusive = true }
                     }
                 },
+            )
+        }
+        composable(Routes.TEMPLATES) {
+            TemplatesScreen(
+                onTemplateClick = { id -> navController.navigate(Routes.templateDetail(id)) },
+                onCreate = { navController.navigate(Routes.TEMPLATE_CREATE) },
+                onNavigateTopLevel = navigateTopLevel,
+            )
+        }
+        composable(
+            route = Routes.TEMPLATE_DETAIL,
+            arguments = listOf(navArgument("templateId") { type = NavType.StringType }),
+        ) { entry ->
+            val templateId = entry.arguments?.getString("templateId").orEmpty()
+            TemplateDetailScreen(
+                templateId = templateId,
+                onBack = { navController.popBackStack() },
+                onEdit = { navController.navigate(Routes.templateEdit(templateId)) },
+                onCreatePod = {
+                    navController.navigate("create?template=$templateId")
+                },
+                onCreateEndpoint = {
+                    navController.navigate(Routes.serverlessCreate(templateId = templateId))
+                },
+            )
+        }
+        composable(Routes.TEMPLATE_CREATE) {
+            TemplateFormScreen(
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = Routes.TEMPLATE_EDIT,
+            arguments = listOf(navArgument("templateId") { type = NavType.StringType }),
+        ) {
+            TemplateFormScreen(
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
             )
         }
         composable(Routes.HUB) {
