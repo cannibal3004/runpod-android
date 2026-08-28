@@ -1,5 +1,6 @@
 package com.canni.runpod.ui.pod
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -220,8 +222,8 @@ fun PodDetailScreen(
                         }
                     }
                     item(key = "spec") { SpecCard(it) }
-                    it.runtime?.ports?.takeIf { p -> p.isNotEmpty() }?.let { ports ->
-                        item(key = "ports") { PortsCard(ports) }
+                    it.runtime?.ports?.takeIf { p -> p.isNotEmpty() }?.let {
+                        item(key = "ports") { PortsCard(pod) }
                     }
                     it.ssh?.let { ssh ->
                         if (ssh.proxy?.command != null || ssh.direct?.command != null) {
@@ -912,16 +914,90 @@ private fun SpecCard(pod: Pod) {
 }
 
 @Composable
-private fun PortsCard(ports: List<com.canni.runpod.data.api.dto.PodRuntimePort>) {
+private fun PortsCard(pod: Pod) {
+    val ports = pod.runtime?.ports ?: return
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     SectionCard("Port mappings") {
         ports.forEach { p ->
-            val mapping = when {
-                p.publicPort != null -> "${p.privatePort ?: "?"} → ${p.publicPort}"
-                else -> "${p.privatePort ?: "?"}"
+            val portNum = p.privatePort ?: p.publicPort
+            val isHttp = p.type?.equals("http", ignoreCase = true) == true
+            if (isHttp && portNum != null) {
+                val url = proxyUrl(pod, portNum)
+                ProxyUrlRow(
+                    label = portLabel(p, portNum),
+                    url = url,
+                    onCopy = { clipboard.setText(AnnotatedString(url)) },
+                    onOpen = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    },
+                )
+            } else {
+                val mapping = when {
+                    p.publicPort != null -> "${p.privatePort ?: "?"} → ${p.publicPort}"
+                    else -> "${p.privatePort ?: "?"}"
+                }
+                KvRow(
+                    label = "$mapping${p.type?.let { " ($it)" } ?: ""}",
+                    value = p.ip ?: "no public IP",
+                )
             }
-            KvRow(
-                label = "${mapping}${p.type?.let { " ($it" } ?: ""}${p.type?.let { ")" } ?: ""}",
-                value = p.ip ?: "no public IP",
+        }
+    }
+}
+
+private fun portLabel(p: com.canni.runpod.data.api.dto.PodRuntimePort, portNum: Int): String =
+    when (portNum) {
+        8888 -> "Port 8888 · Jupyter Lab"
+        8265 -> "Port 8265 · Ray Dashboard"
+        else -> "Port $portNum${p.type?.let { " ($it)" } ?: ""}"
+    }
+
+private fun proxyUrl(pod: Pod, port: Int): String {
+    val base = "https://${pod.id}-$port.proxy.runpod.net"
+    return if (port == 8888) {
+        pod.env?.get("JUPYTER_PASSWORD")?.let { "$base?token=***" } ?: base
+    } else {
+        base
+    }
+}
+
+@Composable
+private fun ProxyUrlRow(
+    label: String,
+    url: String,
+    onCopy: () -> Unit,
+    onOpen: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = url,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable(onClick = onOpen),
+            )
+        }
+        TextButton(onClick = onCopy) {
+            Text("Copy", color = MaterialTheme.colorScheme.primary)
+        }
+        IconButton(onClick = onOpen) {
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Open in browser",
             )
         }
     }
