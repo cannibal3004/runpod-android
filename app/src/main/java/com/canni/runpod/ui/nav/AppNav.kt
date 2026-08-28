@@ -9,6 +9,8 @@ import androidx.navigation.navArgument
 import com.canni.runpod.data.auth.ApiKeyStore
 import com.canni.runpod.ui.billing.BillingScreen
 import com.canni.runpod.ui.create.CreatePodScreen
+import com.canni.runpod.ui.hub.HubDetailScreen
+import com.canni.runpod.ui.hub.HubScreen
 import com.canni.runpod.ui.logs.LogsScreen
 import com.canni.runpod.ui.pod.PodDetailScreen
 import com.canni.runpod.ui.pods.PodsScreen
@@ -29,9 +31,11 @@ object Routes {
     const val LOGS = "logs/{podId}"
     const val SERVERLESS = "serverless"
     const val SERVERLESS_DETAIL = "serverless/{endpointId}"
-    const val SERVERLESS_CREATE = "serverless/create"
+    const val SERVERLESS_CREATE = "serverless/create?hub={hubListingId}"
     const val SERVERLESS_EDIT = "serverless/{endpointId}/edit"
     const val SERVERLESS_WORKER_LOGS = "serverless/{endpointId}/logs/{workerId}"
+    const val HUB = "hub"
+    const val HUB_DETAIL = "hub/{listingId}"
     const val BILLING = "billing"
     const val STORAGE = "storage"
     const val SECRETS = "secrets"
@@ -41,6 +45,9 @@ object Routes {
     fun logs(id: String) = "logs/$id"
     fun serverlessDetail(id: String) = "serverless/$id"
     fun serverlessWorkerLogs(endpointId: String, workerId: String) = "serverless/$endpointId/logs/$workerId"
+    fun serverlessCreate(hubListingId: String? = null) =
+        if (hubListingId == null) "serverless/create" else "serverless/create?hub=$hubListingId"
+    fun hubDetail(id: String) = "hub/$id"
 }
 
 @Composable
@@ -115,17 +122,45 @@ fun AppNav(
         composable(Routes.SERVERLESS) {
             ServerlessScreen(
                 onEndpointClick = { id -> navController.navigate(Routes.serverlessDetail(id)) },
-                onCreate = { navController.navigate(Routes.SERVERLESS_CREATE) },
+                onCreate = { navController.navigate(Routes.serverlessCreate()) },
                 onNavigateTopLevel = navigateTopLevel,
             )
         }
-        composable(Routes.SERVERLESS_CREATE) {
+        composable(
+            route = Routes.SERVERLESS_CREATE,
+            arguments = listOf(
+                navArgument("hubListingId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) {
             EndpointFormScreen(
                 onBack = { navController.popBackStack() },
                 onCreated = { id ->
                     navController.navigate(Routes.serverlessDetail(id)) {
                         popUpTo(Routes.SERVERLESS_CREATE) { inclusive = true }
                     }
+                },
+            )
+        }
+        composable(Routes.HUB) {
+            HubScreen(
+                onListingClick = { id -> navController.navigate(Routes.hubDetail(id)) },
+                onNavigateTopLevel = navigateTopLevel,
+            )
+        }
+        composable(
+            route = Routes.HUB_DETAIL,
+            arguments = listOf(navArgument("listingId") { type = NavType.StringType }),
+        ) { entry ->
+            val listingId = entry.arguments?.getString("listingId").orEmpty()
+            HubDetailScreen(
+                listingId = listingId,
+                onBack = { navController.popBackStack() },
+                onCreateEndpoint = { id ->
+                    navController.navigate(Routes.serverlessCreate(id))
                 },
             )
         }

@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Icon
@@ -44,6 +45,12 @@ fun AppDrawerContent(
             label = { Text("Serverless") },
             selected = currentRoute == Routes.SERVERLESS,
             onClick = { onSelect(Routes.SERVERLESS) },
+        )
+        NavigationDrawerItem(
+            icon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            label = { Text("Hub") },
+            selected = currentRoute == Routes.HUB,
+            onClick = { onSelect(Routes.HUB) },
         )
         NavigationDrawerItem(
             icon = { Icon(Icons.Filled.ShoppingCart, contentDescription = null) },

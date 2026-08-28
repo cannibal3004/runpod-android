@@ -14,7 +14,9 @@ import com.canni.runpod.data.api.dto.NetworkVolume
 import com.canni.runpod.data.api.dto.ServerlessEndpoint
 import com.canni.runpod.data.api.dto.Template
 import com.canni.runpod.data.api.dto.UpdateEndpointRequest
+import com.canni.runpod.data.api.dto.HubReleaseConfig
 import com.canni.runpod.data.repo.CatalogRepository
+import com.canni.runpod.data.repo.HubRepository
 import com.canni.runpod.data.repo.NetworkVolumeRepository
 import com.canni.runpod.data.repo.ServerlessRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,6 +33,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 
 enum class EndpointType {
     QUEUE,
@@ -63,10 +66,13 @@ class EndpointFormViewModel @Inject constructor(
     private val serverlessRepository: ServerlessRepository,
     private val catalogRepository: CatalogRepository,
     private val networkVolumeRepository: NetworkVolumeRepository,
+    private val hubRepository: HubRepository,
+    private val json: Json,
 ) : ViewModel() {
 
     val isEdit: Boolean = savedStateHandle.get<String>("endpointId") != null
     private val endpointId: String = savedStateHandle.get<String>("endpointId").orEmpty()
+    private val hubListingId: String? = savedStateHandle.get<String>("hubListingId")
 
     data class EnvEntry(
         val key: String = "",
@@ -104,6 +110,8 @@ class EndpointFormViewModel @Inject constructor(
         val selectedDataCenterIds: Set<String> = emptySet(),
         val selectedVolumeIds: Set<String> = emptySet(),
         val selectedTemplateId: String? = null,
+        val hubTitle: String? = null,
+        val hubGpuIds: List<String> = emptyList(),
         val flashboot: String = "OFF",
         val timeout: String = "300000",
 
@@ -123,7 +131,11 @@ class EndpointFormViewModel @Inject constructor(
 
     init {
         loadCatalog()
-        if (isEdit) loadEndpoint()
+        if (isEdit) {
+            loadEndpoint()
+        } else if (hubListingId != null) {
+            loadHubPrefill(hubListingId)
+        }
     }
 
     private fun loadCatalog() {
@@ -155,12 +167,15 @@ class EndpointFormViewModel @Inject constructor(
                 val failed = listOf(gpus.await(), cpus.await(), dcs.await(), volumes.await(), templates.await())
                     .count { it.isFailure }
                 _state.update {
+                    val poolId = it.hubGpuIds
+                        .firstOrNull { id -> pools.any { p -> p.id.equals(id, ignoreCase = true) } }
                     it.copy(
                         gpuPools = pools,
                         cpuTypes = cpusList,
                         dataCenters = dcsList,
                         networkVolumes = volumesList,
                         templates = templatesList,
+                        selectedPoolId = it.selectedPoolId ?: poolId,
                         isLoadingCatalog = false,
                         catalogError = if (failed == 5) "Failed to load catalog" else null,
                     )
@@ -175,6 +190,56 @@ class EndpointFormViewModel @Inject constructor(
                 .onSuccess { ep -> prefill(ep) }
                 .onFailure { e ->
                     _state.update { it.copy(error = e.message ?: "Failed to load endpoint") }
+                }
+        }
+    }
+
+    private fun loadHubPrefill(listingId: String) {
+        viewModelScope.launch {
+            runCatching { hubRepository.getListing(listingId) }
+                .onSuccess { listing ->
+                    val release = listing.listedRelease
+                    val config = release?.config
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { raw ->
+                            runCatching {
+                                json.decodeFromJsonElement<HubReleaseConfig>(json.parseToJsonElement(raw))
+                            }.getOrNull()
+                        }
+                    val envEntries = config?.env
+                        ?.map { env ->
+                            val default = (env.input?.defaultValue as? JsonPrimitive)?.content.orEmpty()
+                            EnvEntry(key = env.key, value = default)
+                        }
+                        .orEmpty()
+                    val gpuIds = config?.gpuIds
+                        ?.split(',')
+                        ?.map { it.trim() }
+                        ?.filter { it.isNotBlank() }
+                        .orEmpty()
+                    val runsCpu = config?.runsOn?.equals("CPU", ignoreCase = true) == true
+                    val image = release?.build?.imageName.orEmpty()
+                    _state.update { st ->
+                        val poolId = gpuIds
+                            .firstOrNull { id -> st.gpuPools.any { p -> p.id.equals(id, ignoreCase = true) } }
+                        st.copy(
+                            hubTitle = listing.title,
+                            hubGpuIds = gpuIds,
+                            name = st.name.ifBlank { listing.title },
+                            computeKind = if (runsCpu) ComputeKind.CPU else ComputeKind.GPU,
+                            image = st.image.ifBlank { image },
+                            disk = config?.containerDiskInGb?.toString() ?: st.disk,
+                            gpuCount = config?.gpuCount?.toString() ?: st.gpuCount,
+                            envEntries = if (st.envEntries.isEmpty()) envEntries else st.envEntries,
+                            selectedPoolId = st.selectedPoolId ?: poolId,
+                            error = null,
+                        )
+                    }
+                }
+                .onFailure { e ->
+                    _state.update {
+                        it.copy(error = e.message ?: "Failed to load hub repo")
+                    }
                 }
         }
     }
