@@ -89,3 +89,37 @@ data class PodTotals(
     val cpuAmount: Double = 0.0,
     val diskAmount: Double = 0.0,
 )
+
+@Serializable
+data class ListServerlessBillingResponse(
+    val records: List<ServerlessBillingRecord> = emptyList(),
+    val metadata: ServerlessBillingMetadata? = null,
+)
+
+@Serializable
+data class ServerlessBillingRecord(
+    val serverlessId: String? = null,
+    val startTime: String? = null,
+    val endTime: String? = null,
+    val totalAmount: Double = 0.0,
+    val gpuAmount: Double = 0.0,
+    val cpuAmount: Double = 0.0,
+    val diskAmount: Double = 0.0,
+    val feeAmount: Double = 0.0,
+)
+
+@Serializable
+data class ServerlessBillingMetadata(
+    val recordCount: Int = 0,
+    val uniqueServerlessCount: Int = 0,
+    val totals: ServerlessBillingTotals? = null,
+)
+
+@Serializable
+data class ServerlessBillingTotals(
+    val totalAmount: Double = 0.0,
+    val gpuAmount: Double = 0.0,
+    val cpuAmount: Double = 0.0,
+    val diskAmount: Double = 0.0,
+    val feeAmount: Double = 0.0,
+)

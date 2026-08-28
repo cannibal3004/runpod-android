@@ -60,7 +60,7 @@ fun LogsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Logs") },
+                title = { Text(state.title) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

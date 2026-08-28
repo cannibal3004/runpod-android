@@ -36,11 +36,30 @@ class LogStreamer @Inject constructor(
         tail: Int,
         listener: Listener,
     ) {
+        streamLogs("pods/$podId/logs", source, tail, listener)
+    }
+
+    fun streamWorkerLogs(
+        endpointId: String,
+        workerId: String,
+        source: String?,
+        tail: Int,
+        listener: Listener,
+    ) {
+        streamLogs("serverless/$endpointId/workers/$workerId/logs", source, tail, listener)
+    }
+
+    fun streamLogs(
+        logsPath: String,
+        source: String?,
+        tail: Int,
+        listener: Listener,
+    ) {
         stop()
         generation += 1
         val gen = generation
         val url = config.baseUrl.toHttpUrl()
-            .resolve("pods/$podId/logs")!!
+            .resolve(logsPath)!!
             .newBuilder()
             .apply {
                 addQueryParameter("tail", tail.toString())

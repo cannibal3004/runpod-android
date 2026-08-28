@@ -40,6 +40,7 @@ class LogsViewModel @Inject constructor(
     }
 
     data class UiState(
+        val title: String = "Logs",
         val lines: List<LogLine> = emptyList(),
         val status: Status = Status.Connecting,
         val sourceFilter: SourceFilter = SourceFilter.ALL,
@@ -47,7 +48,12 @@ class LogsViewModel @Inject constructor(
     )
 
     private val podId: String = savedStateHandle.get<String>("podId").orEmpty()
-    private val _state = MutableStateFlow(UiState())
+    private val endpointId: String = savedStateHandle.get<String>("endpointId").orEmpty()
+    private val workerId: String = savedStateHandle.get<String>("workerId").orEmpty()
+    private val isWorkerLogs: Boolean = endpointId.isNotEmpty() && workerId.isNotEmpty()
+    private val _state = MutableStateFlow(
+        UiState(title = if (isWorkerLogs) "Worker logs" else "Logs"),
+    )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private var stopped = false
@@ -84,7 +90,10 @@ class LogsViewModel @Inject constructor(
     }
 
     private fun connect(userInitiated: Boolean = false) {
-        if (stopped || podId.isEmpty()) return
+        if (stopped) return
+        if (isWorkerLogs) {
+            if (endpointId.isEmpty() || workerId.isEmpty()) return
+        } else if (podId.isEmpty()) return
         _state.update { st ->
             st.copy(
                 status = if (userInitiated) Status.Connecting else Status.Reconnecting,
@@ -92,58 +101,70 @@ class LogsViewModel @Inject constructor(
             )
         }
         if (!userInitiated) suppressReplay = true
-        streamer.stream(
-            podId = podId,
-            source = _state.value.sourceFilter.param,
-            tail = 100,
-            listener = object : LogStreamer.Listener {
-                override fun onOpen() {
-                    if (stopped) return
-                    _state.update { it.copy(status = Status.Streaming) }
-                }
+        val listener = object : LogStreamer.Listener {
+            override fun onOpen() {
+                if (stopped) return
+                _state.update { it.copy(status = Status.Streaming) }
+            }
 
-                override fun onEvent(event: LogEvent) {
-                    if (stopped) return
-                    val ts = event.ts
-                    if (suppressReplay) {
-                        val last = lastSeenTs
-                        if (last != null && (ts == null || ts <= last)) return
-                        suppressReplay = false
-                    }
-                    if (ts != null) {
-                        val last = lastSeenTs
-                        if (last == null || ts > last) lastSeenTs = ts
-                    }
-                    reconnectAttempt = 0
-                    val line = LogLine(
-                        source = event.source ?: "container",
-                        text = event.line ?: "",
-                        time = event.ts?.let { ts ->
-                            if (ts.length >= 19) ts.substring(11, 19) else ts
-                        },
+            override fun onEvent(event: LogEvent) {
+                if (stopped) return
+                val ts = event.ts
+                if (suppressReplay) {
+                    val last = lastSeenTs
+                    if (last != null && (ts == null || ts <= last)) return
+                    suppressReplay = false
+                }
+                if (ts != null) {
+                    val last = lastSeenTs
+                    if (last == null || ts > last) lastSeenTs = ts
+                }
+                reconnectAttempt = 0
+                val line = LogLine(
+                    source = event.source ?: "container",
+                    text = event.line ?: "",
+                    time = event.ts?.let { ts ->
+                        if (ts.length >= 19) ts.substring(11, 19) else ts
+                    },
+                )
+                _state.update { st ->
+                    st.copy(
+                        lines = (st.lines + line).takeLast(MAX_LINES),
+                        status = Status.Streaming,
                     )
-                    _state.update { st ->
-                        st.copy(
-                            lines = (st.lines + line).takeLast(MAX_LINES),
-                            status = Status.Streaming,
-                        )
-                    }
                 }
+            }
 
-                override fun onFailure(message: String, code: Int?) {
-                    if (stopped) return
-                    if (code == 401 || code == 403 || code == 404) {
-                        _state.update { st -> st.copy(status = Status.Error(message)) }
-                    } else {
-                        scheduleReconnect()
-                    }
+            override fun onFailure(message: String, code: Int?) {
+                if (stopped) return
+                if (code == 401 || code == 403 || code == 404) {
+                    _state.update { st -> st.copy(status = Status.Error(message)) }
+                } else {
+                    scheduleReconnect()
                 }
+            }
 
-                override fun onClosed() {
-                    if (!stopped) scheduleReconnect()
-                }
-            },
-        )
+            override fun onClosed() {
+                if (!stopped) scheduleReconnect()
+            }
+        }
+        val source = _state.value.sourceFilter.param
+        if (isWorkerLogs) {
+            streamer.streamWorkerLogs(
+                endpointId = endpointId,
+                workerId = workerId,
+                source = source,
+                tail = 100,
+                listener = listener,
+            )
+        } else {
+            streamer.stream(
+                podId = podId,
+                source = source,
+                tail = 100,
+                listener = listener,
+            )
+        }
     }
 
     private fun scheduleReconnect() {

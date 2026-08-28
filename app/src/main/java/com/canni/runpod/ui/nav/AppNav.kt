@@ -13,6 +13,8 @@ import com.canni.runpod.ui.logs.LogsScreen
 import com.canni.runpod.ui.pod.PodDetailScreen
 import com.canni.runpod.ui.pods.PodsScreen
 import com.canni.runpod.ui.secrets.SecretsScreen
+import com.canni.runpod.ui.serverless.ServerlessDetailScreen
+import com.canni.runpod.ui.serverless.ServerlessScreen
 import com.canni.runpod.ui.settings.SettingsScreen
 import com.canni.runpod.ui.setup.ApiKeyScreen
 import com.canni.runpod.ui.storage.StorageScreen
@@ -24,6 +26,9 @@ object Routes {
     const val POD_DETAIL = "pod/{podId}"
     const val CREATE = "create"
     const val LOGS = "logs/{podId}"
+    const val SERVERLESS = "serverless"
+    const val SERVERLESS_DETAIL = "serverless/{endpointId}"
+    const val SERVERLESS_WORKER_LOGS = "serverless/{endpointId}/logs/{workerId}"
     const val BILLING = "billing"
     const val STORAGE = "storage"
     const val SECRETS = "secrets"
@@ -31,6 +36,8 @@ object Routes {
 
     fun podDetail(id: String) = "pod/$id"
     fun logs(id: String) = "logs/$id"
+    fun serverlessDetail(id: String) = "serverless/$id"
+    fun serverlessWorkerLogs(endpointId: String, workerId: String) = "serverless/$endpointId/logs/$workerId"
 }
 
 @Composable
@@ -99,6 +106,34 @@ fun AppNav(
         composable(
             route = Routes.LOGS,
             arguments = listOf(navArgument("podId") { type = NavType.StringType }),
+        ) {
+            LogsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.SERVERLESS) {
+            ServerlessScreen(
+                onEndpointClick = { id -> navController.navigate(Routes.serverlessDetail(id)) },
+                onNavigateTopLevel = navigateTopLevel,
+            )
+        }
+        composable(
+            route = Routes.SERVERLESS_DETAIL,
+            arguments = listOf(navArgument("endpointId") { type = NavType.StringType }),
+        ) { entry ->
+            val endpointId = entry.arguments?.getString("endpointId").orEmpty()
+            ServerlessDetailScreen(
+                endpointId = endpointId,
+                onBack = { navController.popBackStack() },
+                onOpenWorkerLogs = { workerId ->
+                    navController.navigate(Routes.serverlessWorkerLogs(endpointId, workerId))
+                },
+            )
+        }
+        composable(
+            route = Routes.SERVERLESS_WORKER_LOGS,
+            arguments = listOf(
+                navArgument("endpointId") { type = NavType.StringType },
+                navArgument("workerId") { type = NavType.StringType },
+            ),
         ) {
             LogsScreen(onBack = { navController.popBackStack() })
         }

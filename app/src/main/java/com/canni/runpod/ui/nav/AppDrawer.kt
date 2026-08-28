@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +38,12 @@ fun AppDrawerContent(
             label = { Text("Pods") },
             selected = currentRoute == Routes.PODS,
             onClick = { onSelect(Routes.PODS) },
+        )
+        NavigationDrawerItem(
+            icon = { Icon(Icons.Filled.Send, contentDescription = null) },
+            label = { Text("Serverless") },
+            selected = currentRoute == Routes.SERVERLESS,
+            onClick = { onSelect(Routes.SERVERLESS) },
         )
         NavigationDrawerItem(
             icon = { Icon(Icons.Filled.ShoppingCart, contentDescription = null) },

@@ -8,7 +8,11 @@ import com.canni.runpod.data.api.dto.ListNetworkVolumesResponse
 import com.canni.runpod.data.api.dto.ListPodsResponse
 import com.canni.runpod.data.api.dto.ListTemplatesResponse
 import com.canni.runpod.data.api.dto.NetworkVolume
+import com.canni.runpod.data.api.dto.ListEndpointReleasesResponse
+import com.canni.runpod.data.api.dto.ListEndpointWorkersResponse
+import com.canni.runpod.data.api.dto.ListEndpointsResponse
 import com.canni.runpod.data.api.dto.Pod
+import com.canni.runpod.data.api.dto.ServerlessEndpoint
 import com.canni.runpod.data.api.dto.SshKeys
 import com.canni.runpod.data.api.dto.UpdateNetworkVolumeRequest
 import com.canni.runpod.data.api.dto.UpdateSshKeysRequest
@@ -111,4 +115,36 @@ interface RunPodApi {
         @Query("lastN") lastN: Int? = null,
         @Query("podId") podId: String? = null,
     ): Response<com.canni.runpod.data.api.dto.ListPodBillingResponse>
+
+    @GET("serverless")
+    suspend fun listEndpoints(): Response<ListEndpointsResponse>
+
+    @GET("serverless/{id}")
+    suspend fun getEndpoint(
+        @Path("id") id: String,
+    ): Response<ServerlessEndpoint>
+
+    @DELETE("serverless/{id}")
+    suspend fun deleteEndpoint(
+        @Path("id") id: String,
+    ): Response<Unit>
+
+    @GET("serverless/{id}/releases")
+    suspend fun listEndpointReleases(
+        @Path("id") id: String,
+    ): Response<ListEndpointReleasesResponse>
+
+    @GET("serverless/{id}/workers")
+    suspend fun listEndpointWorkers(
+        @Path("id") id: String,
+    ): Response<ListEndpointWorkersResponse>
+
+    @GET("billing/serverless")
+    suspend fun serverlessBilling(
+        @Query("startTime") startTime: String? = null,
+        @Query("endTime") endTime: String? = null,
+        @Query("bucketSize") bucketSize: String? = null,
+        @Query("lastN") lastN: Int? = null,
+        @Query("serverlessId") serverlessId: String? = null,
+    ): Response<com.canni.runpod.data.api.dto.ListServerlessBillingResponse>
 }
