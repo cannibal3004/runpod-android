@@ -7,6 +7,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.canni.runpod.data.api.dto.Pod
 import com.canni.runpod.data.api.dto.PodAction
+import com.canni.runpod.data.api.dto.PodMigration
+import com.canni.runpod.data.api.dto.PodStatus
 import com.canni.runpod.data.auth.SshKeyStore
 import com.canni.runpod.data.repo.MigrationStore
 import com.canni.runpod.data.repo.PodRepository
@@ -427,36 +429,118 @@ class PodDetailViewModel @Inject constructor(
         migrationPollJob?.cancel()
         migrationPollJob = viewModelScope.launch {
             var errors = 0
+            var lastSeen: PodMigration? = null
             while (true) {
                 val fetched = attempt { podRepository.migrationStatus(migrationId) }
                 val migration = fetched.getOrNull()
-                if (fetched.isFailure || migration?.status.isNullOrBlank()) {
-                    errors++
-                    if (errors >= MAX_POLL_ERRORS) {
-                        finishMigration(migration, "Lost connection to migration status. Check the pod list for the latest state.")
-                        return@launch
+                when {
+                    migration != null && !migration.status.isNullOrBlank() -> {
+                        errors = 0
+                        lastSeen = migration
+                        val status = migration.status.lowercase()
+                        if (status in TERMINAL_STATUSES) {
+                            finishMigration(migration, null)
+                            return@launch
+                        }
+                        _state.update {
+                            it.copy(
+                                migration = it.migration?.copy(
+                                    status = migration.status,
+                                    progress = migration.progress?.toFloat(),
+                                    message = migration.message,
+                                    targetPodId = migration.targetPodId,
+                                ),
+                            )
+                        }
                     }
-                } else {
-                    errors = 0
-                    val status = migration.status.lowercase()
-                    if (status in TERMINAL_STATUSES) {
-                        finishMigration(migration, null)
-                        return@launch
+
+                    fetched.isSuccess -> {
+                        // The server definitively says the record is gone. RunPod
+                        // cleans up migration records when they finish, so infer
+                        // the outcome from the pods' states instead.
+                        val outcome = resolveRecordGoneOutcome(lastSeen)
+                        if (outcome == RecordGoneOutcome.UNKNOWN) {
+                            errors++
+                            if (errors >= MAX_POLL_ERRORS) {
+                                finishMigration(
+                                    lastSeen?.copy(status = "failed") ?: PodMigration(id = migrationId, status = "failed"),
+                                    "Lost connection to migration status. Check the pod list for the latest state.",
+                                )
+                                return@launch
+                            }
+                        } else {
+                            finishForOutcome(outcome, lastSeen, migrationId)
+                            return@launch
+                        }
                     }
-                    _state.update {
-                        it.copy(
-                            migration = it.migration?.copy(
-                                status = migration.status,
-                                progress = migration.progress?.toFloat(),
-                                message = migration.message,
-                                targetPodId = migration.targetPodId,
-                            ),
-                        )
+
+                    else -> {
+                        errors++
+                        if (errors >= MAX_POLL_ERRORS) {
+                            // Verify via pod states before declaring failure — an
+                            // API hiccup right after completion would otherwise be
+                            // misreported as a failed migration.
+                            when (resolveRecordGoneOutcome(lastSeen)) {
+                                RecordGoneOutcome.COMPLETED ->
+                                    finishForOutcome(RecordGoneOutcome.COMPLETED, lastSeen, migrationId)
+                                RecordGoneOutcome.FAILED ->
+                                    finishForOutcome(RecordGoneOutcome.FAILED, lastSeen, migrationId)
+                                RecordGoneOutcome.UNKNOWN ->
+                                    finishMigration(
+                                        lastSeen?.copy(status = "failed") ?: PodMigration(id = migrationId, status = "failed"),
+                                        "Lost connection to migration status. Check the pod list for the latest state.",
+                                    )
+                            }
+                            return@launch
+                        }
                     }
                 }
                 delay(POLL_INTERVAL_MS)
             }
         }
+    }
+
+    private enum class RecordGoneOutcome {
+        COMPLETED, FAILED, UNKNOWN,
+    }
+
+    private suspend fun finishForOutcome(outcome: RecordGoneOutcome, lastSeen: PodMigration?, migrationId: String) {
+        when (outcome) {
+            RecordGoneOutcome.COMPLETED ->
+                finishMigration(
+                    lastSeen?.copy(status = "completed") ?: PodMigration(id = migrationId, status = "completed"),
+                    null,
+                )
+            RecordGoneOutcome.FAILED ->
+                finishMigration(
+                    lastSeen?.copy(status = "failed") ?: PodMigration(id = migrationId, status = "failed"),
+                    "The migration record disappeared while the original pod is still active. " +
+                        "If your pod works normally, the migration likely succeeded — the " +
+                        "migrated pod appears in your pod list with a \"-migration\" suffix.",
+                )
+            RecordGoneOutcome.UNKNOWN -> Unit
+        }
+    }
+
+    private suspend fun resolveRecordGoneOutcome(lastSeen: PodMigration?): RecordGoneOutcome {
+        // After a successful migration the new pod is running.
+        lastSeen?.targetPodId?.takeIf { it.isNotBlank() }?.let { targetId ->
+            runCatching { podRepository.getPod(targetId) }
+                .getOrNull()
+                ?.let { target ->
+                    if (target.status == PodStatus.RUNNING) return RecordGoneOutcome.COMPLETED
+                }
+        }
+        // RunPod exits the source pod when the migration completes.
+        return runCatching { podRepository.getPod(podId) }.fold(
+            onSuccess = { source ->
+                when (source.status) {
+                    PodStatus.EXITED, PodStatus.TERMINATED -> RecordGoneOutcome.COMPLETED
+                    else -> RecordGoneOutcome.FAILED
+                }
+            },
+            onFailure = { RecordGoneOutcome.UNKNOWN },
+        )
     }
 
     private suspend fun finishMigration(
