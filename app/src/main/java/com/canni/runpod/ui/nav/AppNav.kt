@@ -1,6 +1,7 @@
 package com.canni.runpod.ui.nav
 
 import androidx.compose.runtime.Composable
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -65,6 +66,16 @@ object Routes {
     fun templateEdit(id: String) = "template/$id/edit"
 }
 
+// Only pop if this entry is still the top of the back stack. During a back
+// transition the outgoing screen is still composed (and hit-testable) for a
+// few hundred ms; a tap on its back button in that window would otherwise
+// pop the destination beneath it and can empty the back stack (blank screen).
+private fun NavHostController.popIfCurrent(entry: NavBackStackEntry) {
+    if (currentBackStackEntry == entry) {
+        popBackStack()
+    }
+}
+
 @Composable
 fun AppNav(
     navController: NavHostController,
@@ -93,11 +104,11 @@ fun AppNav(
                 },
             )
         }
-        composable(Routes.SETUP_CHANGE) {
+        composable(Routes.SETUP_CHANGE) { entry ->
             ApiKeyScreen(
                 changed = true,
-                onBack = { navController.popBackStack() },
-                onConnected = { navController.popBackStack() },
+                onBack = { navController.popIfCurrent(entry) },
+                onConnected = { navController.popIfCurrent(entry) },
             )
         }
         composable(Routes.PODS) {
@@ -116,9 +127,9 @@ fun AppNav(
                     defaultValue = null
                 },
             ),
-        ) {
+        ) { entry ->
             CreatePodScreen(
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popIfCurrent(entry) },
                 onCreated = { podId ->
                     navController.navigate(Routes.podDetail(podId)) {
                         popUpTo(Routes.CREATE) { inclusive = true }
@@ -133,15 +144,15 @@ fun AppNav(
             val podId = entry.arguments?.getString("podId").orEmpty()
             PodDetailScreen(
                 podId = podId,
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popIfCurrent(entry) },
                 onOpenLogs = { navController.navigate(Routes.logs(podId)) },
             )
         }
         composable(
             route = Routes.LOGS,
             arguments = listOf(navArgument("podId") { type = NavType.StringType }),
-        ) {
-            LogsScreen(onBack = { navController.popBackStack() })
+        ) { entry ->
+            LogsScreen(onBack = { navController.popIfCurrent(entry) })
         }
         composable(Routes.SERVERLESS) {
             ServerlessScreen(
@@ -164,9 +175,9 @@ fun AppNav(
                     defaultValue = null
                 },
             ),
-        ) {
+        ) { entry ->
             EndpointFormScreen(
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popIfCurrent(entry) },
                 onCreated = { id ->
                     navController.navigate(Routes.serverlessDetail(id)) {
                         popUpTo(Routes.SERVERLESS_CREATE) { inclusive = true }
@@ -188,7 +199,7 @@ fun AppNav(
             val templateId = entry.arguments?.getString("templateId").orEmpty()
             TemplateDetailScreen(
                 templateId = templateId,
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popIfCurrent(entry) },
                 onEdit = { navController.navigate(Routes.templateEdit(templateId)) },
                 onCreatePod = {
                     navController.navigate("create?template=$templateId")
@@ -198,19 +209,19 @@ fun AppNav(
                 },
             )
         }
-        composable(Routes.TEMPLATE_CREATE) {
+        composable(Routes.TEMPLATE_CREATE) { entry ->
             TemplateFormScreen(
-                onBack = { navController.popBackStack() },
-                onSaved = { navController.popBackStack() },
+                onBack = { navController.popIfCurrent(entry) },
+                onSaved = { navController.popIfCurrent(entry) },
             )
         }
         composable(
             route = Routes.TEMPLATE_EDIT,
             arguments = listOf(navArgument("templateId") { type = NavType.StringType }),
-        ) {
+        ) { entry ->
             TemplateFormScreen(
-                onBack = { navController.popBackStack() },
-                onSaved = { navController.popBackStack() },
+                onBack = { navController.popIfCurrent(entry) },
+                onSaved = { navController.popIfCurrent(entry) },
             )
         }
         composable(Routes.HUB) {
@@ -226,7 +237,7 @@ fun AppNav(
             val listingId = entry.arguments?.getString("listingId").orEmpty()
             HubDetailScreen(
                 listingId = listingId,
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popIfCurrent(entry) },
                 onCreateEndpoint = { id ->
                     navController.navigate(Routes.serverlessCreate(id))
                 },
@@ -239,7 +250,7 @@ fun AppNav(
             val endpointId = entry.arguments?.getString("endpointId").orEmpty()
             ServerlessDetailScreen(
                 endpointId = endpointId,
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popIfCurrent(entry) },
                 onEdit = {
                     navController.navigate("serverless/$endpointId/edit")
                 },
@@ -251,10 +262,10 @@ fun AppNav(
         composable(
             route = Routes.SERVERLESS_EDIT,
             arguments = listOf(navArgument("endpointId") { type = NavType.StringType }),
-        ) {
+        ) { entry ->
             EndpointFormScreen(
-                onBack = { navController.popBackStack() },
-                onCreated = { navController.popBackStack() },
+                onBack = { navController.popIfCurrent(entry) },
+                onCreated = { navController.popIfCurrent(entry) },
             )
         }
         composable(
@@ -263,8 +274,8 @@ fun AppNav(
                 navArgument("endpointId") { type = NavType.StringType },
                 navArgument("workerId") { type = NavType.StringType },
             ),
-        ) {
-            LogsScreen(onBack = { navController.popBackStack() })
+        ) { entry ->
+            LogsScreen(onBack = { navController.popIfCurrent(entry) })
         }
         composable(Routes.BILLING) {
             BillingScreen(onNavigateTopLevel = navigateTopLevel)
