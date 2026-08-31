@@ -1290,6 +1290,8 @@ fun SectionCard(
 
 @Composable
 fun KvRow(label: String, value: String) {
+    var expanded by remember { mutableStateOf(false) }
+    var truncated by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1306,7 +1308,20 @@ fun KvRow(label: String, value: String) {
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f),
+            maxLines = if (expanded) Int.MAX_VALUE else 1,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { result ->
+                if (!expanded) truncated = result.isLineEllipsized(result.lineCount - 1)
+            },
+            modifier = Modifier
+                .weight(1f)
+                .then(
+                    if (truncated || expanded) {
+                        Modifier.clickable(onClickLabel = "Expand $label") { expanded = !expanded }
+                    } else {
+                        Modifier
+                    },
+                ),
         )
     }
 }
