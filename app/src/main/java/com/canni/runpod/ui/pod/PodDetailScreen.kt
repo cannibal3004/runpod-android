@@ -77,6 +77,7 @@ import com.canni.runpod.ui.common.formatUtc
 import com.canni.runpod.ui.common.formatUptime
 import com.canni.runpod.ui.components.EnvEntry
 import com.canni.runpod.ui.components.EnvVarEditor
+import com.canni.runpod.ui.components.EnvVarViewer
 import com.canni.runpod.ui.components.StatusChip
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -95,6 +96,7 @@ fun PodDetailScreen(
     var confirmAction by remember { mutableStateOf<PodAction?>(null) }
     var showTermuxInstall by remember { mutableStateOf(false) }
     var showTermuxPermission by remember { mutableStateOf(false) }
+    var envViewerVisible by remember { mutableStateOf(false) }
 
     val requestTermuxPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -279,8 +281,30 @@ fun PodDetailScreen(
                     }
                     it.env?.takeIf { e -> e.isNotEmpty() }?.let { env ->
                         item(key = "env") {
-                            SectionCard("Environment variables") {
-                                env.forEach { (k, v) -> KvRow(k, v) }
+                            OutlinedButton(
+                                onClick = { envViewerVisible = true },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text("Environment variables")
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "${env.size}",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                            contentDescription = "View environment variables",
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -423,6 +447,16 @@ fun PodDetailScreen(
             onOpenEnvEditor = { viewModel.openEnvEditor() },
             onSave = { viewModel.saveEdit() },
         )
+    }
+
+    if (envViewerVisible) {
+        val env = pod?.env
+        if (env != null) {
+            EnvVarViewer(
+                entries = env.map { EnvEntry(it.key, it.value) },
+                onBack = { envViewerVisible = false },
+            )
+        }
     }
 
     val edit = state.edit

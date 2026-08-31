@@ -1,11 +1,14 @@
 package com.canni.runpod.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -165,6 +168,78 @@ fun EnvVarEditor(
                     .padding(16.dp),
             ) {
                 Text("Add variable")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EnvVarViewer(
+    entries: List<EnvEntry>,
+    onBack: () -> Unit,
+) {
+    var expandedIndex by remember { mutableStateOf<Int?>(null) }
+    var truncated by remember { mutableStateOf<Set<Int>>(emptySet()) }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text("Environment variables") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(entries.size) { index ->
+                val entry = entries[index]
+                val expanded = expandedIndex == index
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (expanded || index in truncated) {
+                                Modifier.clickable(onClickLabel = "Expand ${entry.key}") {
+                                    expandedIndex = if (expanded) null else index
+                                }
+                            } else {
+                                Modifier
+                            },
+                        ),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = entry.key.ifBlank { "(no key)" },
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = entry.value.ifBlank { "(empty)" },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = if (expanded) Int.MAX_VALUE else 2,
+                            overflow = TextOverflow.Ellipsis,
+                            onTextLayout = { result ->
+                                if (!expanded) {
+                                    val isTruncated = result.isLineEllipsized(result.lineCount - 1)
+                                    truncated = if (isTruncated) truncated + index else truncated - index
+                                }
+                            },
+                        )
+                    }
+                }
             }
         }
     }
